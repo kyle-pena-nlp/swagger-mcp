@@ -1,0 +1,8 @@
+Weather Alerts for Philadelphia, PA
+Date: June 19, 2024
+Time: Generated at current time
+
+CURRENT ALERTS:
+No active weather alerts for Philadelphia, PA at this time.
+
+Note: This information was retrieved from the National Weather Service alert system for the state of Pennsylvania. 
