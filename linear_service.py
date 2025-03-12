@@ -247,12 +247,27 @@ class LinearService:
             self.logger.exception(f"Error getting comments for issue with ID {issue_id}")
             raise
 
-    async def search_issues(self, query_string: str) -> List[LinearIssue]:
+    async def search_issues(self, description_contains: Optional[str] = None, title_contains: Optional[str] = None) -> List[LinearIssue]:
         """Search for Linear issues based on a query string"""
-        self.logger.info(f"Searching issues with query: {query_string}")
+        self.logger.info(f"Searching issues with description containing: {description_contains} or title containing: {title_contains}")
+        
+        # Build filter based on provided parameters
+        filter_parts = []
+        if description_contains:
+            filter_parts.append({"description": {"containsIgnoreCase": description_contains}})
+        if title_contains:
+            filter_parts.append({"title": {"containsIgnoreCase": title_contains}})
+        
+        # Construct the filter object
+        filter_obj = {}
+        if len(filter_parts) > 1:
+            filter_obj = {"or": filter_parts}
+        elif len(filter_parts) == 1:
+            filter_obj = filter_parts[0]
+        
         query = """
-        query($filter: String!) {
-            issueSearch(filter: $filter) {
+        query($filter: IssueFilter) {
+            issues(filter: $filter, first: 10) {
                 nodes {
                     id
                     title
@@ -275,17 +290,17 @@ class LinearService:
         }
         """
         
-        variables = {"filter": query_string}
+        variables = {"filter": filter_obj}
         try:
             result = await self.client.execute_query(query, variables)
-            issues = result.get("data", {}).get("issueSearch", {}).get("nodes", [])
+            self.logger.info(f"Result: {result}")
+            issues = result.get("data", {}).get("issues", {}).get("nodes", [])
             
-            self.logger.info(f"Found {len(issues)} issues matching query: {query_string}")
+            self.logger.info(f"Found {len(issues)} issues matching query")
             return [LinearIssue(**issue) for issue in issues]
         except Exception as e:
-            self.logger.exception(f"Error searching issues with query: {query_string}")
+            self.logger.exception(f"Error searching issues")
             raise
-
     async def create_issue(self, title: str, description: str, team_id: str) -> LinearIssue:
         """Create a new Linear issue"""
         self.logger.info(f"Creating new issue: {title} for team: {team_id}")

@@ -11,25 +11,25 @@ configure_logging(level=logging.INFO, log_file="linear_api.log")
 mcp = FastMCP("Linear")
 
 # MCP resources and tools
-@mcp.resource("linear://issues")
+@mcp.tool()
 async def get_issues() -> List[LinearIssue]:
     """Get all Linear issues"""
     return await linear_service.get_issues()
 
-@mcp.resource("linear://issue/{issue_id}")
+@mcp.tool()
 async def get_issue(issue_id: str) -> LinearIssue:
     """Get a specific Linear issue by ID"""
     return await linear_service.get_issue(issue_id)
 
-@mcp.resource("linear://issue/{issue_id}/comments")
+@mcp.tool()
 async def get_issue_comments(issue_id: str) -> List[LinearComment]:
     """Get comments for a specific Linear issue"""
     return await linear_service.get_issue_comments(issue_id)
 
 @mcp.tool()
-async def search_issues(query_string: str) -> List[LinearIssue]:
+async def search_issues(query_string : str) -> List[LinearIssue]:
     """Search for Linear issues based on a query string"""
-    return await linear_service.search_issues(query_string)
+    return await linear_service.search_issues(query_string, query_string)
 
 @mcp.tool()
 async def create_issue(title: str, description: str, team_id: str) -> LinearIssue:
