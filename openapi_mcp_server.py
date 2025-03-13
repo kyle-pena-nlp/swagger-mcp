@@ -2,19 +2,29 @@ from typing import List, Dict, Any, Optional, Union, Callable, Awaitable, Iterat
 import asyncio
 import json
 import logging
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
 import sys
 import requests  # Add requests for URL fetching
 
 from mcp.server import Server, NotificationOptions
-from mcp.types import Tool, ToolParameter, ToolCall, ToolResult
+from mcp.types import Tool
 from openapi_parser import OpenAPIParser
 from simple_endpoint import SimpleEndpoint, create_simple_endpoint
 from endpoint_invoker import EndpointInvoker
 from mcp.server.stdio import stdio_server
 from mcp.server.models import InitializationOptions
 # Configure logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                   handlers=[
+                       logging.StreamHandler(),  # Console handler
+                       RotatingFileHandler(
+                           'openapi_mcp_server.log',
+                           maxBytes=10485760,  # 10MB
+                           backupCount=5
+                       )
+                   ])
 logger = logging.getLogger(__name__)
 
 class OpenAPIMCPServer:
@@ -29,7 +39,7 @@ class OpenAPIMCPServer:
         openapi_spec: str,  # Changed parameter name from openapi_spec_path to openapi_spec
         server_url: Optional[str] = None,
         bearer_token: Optional[str] = None,
-        server_version: Optional[str] = None,
+        server_version: Optional[str] = "1.0.0",
         instructions: Optional[str] = None
     ):
         """
@@ -44,15 +54,14 @@ class OpenAPIMCPServer:
             instructions: Optional instructions for the server
         """
         self.server_name = server_name
-        self.server_version = server_version
+        self.server_version = server_version or "1.0.0"  # Ensure server_version is not None
         self.server_url = server_url
         self.bearer_token = bearer_token
         
         # Create the MCP server
         self.server = Server(
             name=server_name,
-            version=server_version,
-            instructions=instructions
+            version=self.server_version
         )
         
         # Load and parse the OpenAPI spec
@@ -96,6 +105,7 @@ class OpenAPIMCPServer:
         @self.server.list_tools()
         async def list_tools() -> List[Tool]:
             """Return a list of tools based on the OpenAPI spec endpoints."""
+            logger.info("Listing available tools")
             tools = []
             
             for operation_id, endpoint in self.simple_endpoints.items():
@@ -103,33 +113,32 @@ class OpenAPIMCPServer:
                 if endpoint.deprecated:
                     continue
                 
-                # Create tool parameters from the endpoint's combined parameter schema
-                parameters = []
+                # Create input schema from the endpoint's combined parameter schema
+                input_schema = {
+                    "type": "object",
+                    "properties": {},
+                    "required": []
+                }
+                
                 if endpoint.combined_parameter_schema and 'properties' in endpoint.combined_parameter_schema:
-                    for param_name, param_schema in endpoint.combined_parameter_schema['properties'].items():
-                        required = ('required' in endpoint.combined_parameter_schema and 
-                                  param_name in endpoint.combined_parameter_schema['required'])
-                        
-                        parameter = ToolParameter(
-                            name=param_name,
-                            description=param_schema.get('description', f"Parameter {param_name}"),
-                            required=required,
-                            schema=param_schema
-                        )
-                        parameters.append(parameter)
+                    input_schema["properties"] = endpoint.combined_parameter_schema['properties']
+                    if 'required' in endpoint.combined_parameter_schema:
+                        input_schema["required"] = endpoint.combined_parameter_schema['required']
                 
                 # Create the tool definition
                 tool = Tool(
                     name=operation_id,
                     description=endpoint.summary or f"{endpoint.method.upper()} {endpoint.path}",
-                    parameters=parameters
+                    inputSchema=input_schema
                 )
                 tools.append(tool)
+                logger.info(f"Added tool: {operation_id} ({endpoint.method.upper()} {endpoint.path})")
             
+            logger.info(f"Total tools available: {len(tools)}")
             return tools
         
         @self.server.call_tool()
-        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[Any]:
+        async def call_tool(name: str, arguments: Dict[str, Any]) -> Any:
             """
             Handle a tool call by invoking the corresponding endpoint.
             
@@ -138,36 +147,49 @@ class OpenAPIMCPServer:
                 arguments: The tool arguments
                 
             Returns:
-                A list containing the tool result
+                The API response result
             """
+            logger.info(f"Tool call received: {name}")
+            logger.info(f"Tool arguments: {json.dumps(arguments, indent=2, default=str)}")
+            
             try:
                 # Find the corresponding endpoint
                 if name not in self.simple_endpoints:
-                    return [ToolResult(error=f"Tool not found: {name}")]
+                    logger.error(f"Tool not found: {name}")
+                    raise ValueError(f"Tool not found: {name}")
                 
                 endpoint = self.simple_endpoints[name]
+                logger.info(f"Invoking endpoint: {endpoint.method.upper()} {endpoint.path}")
                 
                 # Create an endpoint invoker
                 invoker = EndpointInvoker(endpoint)
                 
                 # Invoke the endpoint with the provided parameters
+                logger.info(f"Sending request to: {self.server_url or '[default server]'}")
                 response = invoker.invoke_with_params(
                     params=arguments,
                     server_url=self.server_url,
                     bearer_token=self.bearer_token
                 )
                 
+                logger.info(f"Response status code: {response.status_code}")
+                
                 # Process the response
                 try:
                     result = response.json()
-                    return [ToolResult(value=result)]
+                    logger.info(f"Received JSON response of size: {len(json.dumps(result))} bytes")
+                    return result
                 except ValueError:
                     # Not JSON content
-                    return [ToolResult(value=response.text)]
+                    text_response = response.text
+                    logger.info(f"Received text response of size: {len(text_response)} bytes")
+                    return text_response
                     
             except Exception as e:
                 logger.error(f"Error calling tool {name}: {e}")
-                return [ToolResult(error=str(e))]
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                raise
 
 
     async def run(self):
@@ -204,6 +226,10 @@ def run_server(
         host: Host to bind to
         port: Port to listen on
     """
+    logger.info(f"Starting OpenAPI MCP Server: {server_name}")
+    logger.info(f"OpenAPI spec: {openapi_spec}")
+    logger.info(f"Server URL: {server_url}")
+    
     server = OpenAPIMCPServer(
         server_name=server_name,
         openapi_spec=openapi_spec,
@@ -211,6 +237,7 @@ def run_server(
         bearer_token=bearer_token
     )
     
+    logger.info("Server initialized, starting main loop")
     asyncio.run(server.run())
 
 
@@ -219,9 +246,9 @@ if __name__ == "__main__":
     import argparse
     
     parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI spec")
-    parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", default = "https://petstore3.swagger.io/api/v3/openapi.json")
-    parser.add_argument("--name", default="PetStore-MCP-Server", help="Server name")
-    parser.add_argument("--url", help="Base URL for API calls (overrides servers in spec)", default = "https://petstore3.swagger.io/api/v3")
+    parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", nargs="?")
+    parser.add_argument("--name", help="Server name")
+    parser.add_argument("--url", help="Base URL for API calls (overrides servers in spec)")
     parser.add_argument("--token", help="Bearer token for authenticated requests")
     
     args = parser.parse_args()
