@@ -8,7 +8,7 @@ import sys
 import requests  # Add requests for URL fetching
 
 from mcp.server import Server, NotificationOptions
-from mcp.types import Tool
+from mcp.types import Tool, CallToolResult, TextContent, ImageContent, EmbeddedResource
 from openapi_parser import OpenAPIParser
 from simple_endpoint import SimpleEndpoint, create_simple_endpoint
 from endpoint_invoker import EndpointInvoker
@@ -138,7 +138,7 @@ class OpenAPIMCPServer:
             return tools
         
         @self.server.call_tool()
-        async def call_tool(name: str, arguments: Dict[str, Any]) -> Any:
+        async def call_tool(name: str, arguments: Dict[str, Any]) -> List[Union[TextContent, ImageContent, EmbeddedResource]]:
             """
             Handle a tool call by invoking the corresponding endpoint.
             
@@ -147,7 +147,7 @@ class OpenAPIMCPServer:
                 arguments: The tool arguments
                 
             Returns:
-                The API response result
+                List of content objects (TextContent, ImageContent, or EmbeddedResource)
             """
             logger.info(f"Tool call received: {name}")
             logger.info(f"Tool arguments: {json.dumps(arguments, indent=2, default=str)}")
@@ -156,7 +156,7 @@ class OpenAPIMCPServer:
                 # Find the corresponding endpoint
                 if name not in self.simple_endpoints:
                     logger.error(f"Tool not found: {name}")
-                    raise ValueError(f"Tool not found: {name}")
+                    return [TextContent(type="text", text=f"Tool not found: {name}")]
                 
                 endpoint = self.simple_endpoints[name]
                 logger.info(f"Invoking endpoint: {endpoint.method.upper()} {endpoint.path}")
@@ -178,18 +178,21 @@ class OpenAPIMCPServer:
                 try:
                     result = response.json()
                     logger.info(f"Received JSON response of size: {len(json.dumps(result))} bytes")
-                    return result
+                    # Format the result as a pretty JSON string
+                    formatted_result = json.dumps(result, indent=2, default=str)
+                    return [TextContent(type="text", text=formatted_result)]
                 except ValueError:
                     # Not JSON content
                     text_response = response.text
                     logger.info(f"Received text response of size: {len(text_response)} bytes")
-                    return text_response
+                    return [TextContent(type="text", text=text_response)]
                     
             except Exception as e:
                 logger.error(f"Error calling tool {name}: {e}")
                 import traceback
-                logger.error(f"Traceback: {traceback.format_exc()}")
-                raise
+                error_trace = traceback.format_exc()
+                logger.error(f"Traceback: {error_trace}")
+                return [TextContent(type="text", text=f"Error calling tool {name}: {str(e)}\n{error_trace}")]
 
 
     async def run(self):
