@@ -2,6 +2,7 @@ import unittest
 import json
 import os
 from openapi_parser import OpenAPIParser
+from endpoint import Endpoint
 
 
 class TestOpenAPIParser(unittest.TestCase):
@@ -278,7 +279,7 @@ class TestOpenAPIParser(unittest.TestCase):
     def test_endpoint_methods(self):
         """Test that the HTTP methods are correctly extracted."""
         endpoints = self.parser.get_endpoints()
-        methods = [endpoint['method'] for endpoint in endpoints]
+        methods = [endpoint.method for endpoint in endpoints]
         self.assertIn('GET', methods)
         self.assertIn('POST', methods)
         self.assertIn('DELETE', methods)
@@ -287,14 +288,14 @@ class TestOpenAPIParser(unittest.TestCase):
     def test_endpoint_paths(self):
         """Test that the paths are correctly extracted."""
         endpoints = self.parser.get_endpoints()
-        paths = [endpoint['path'] for endpoint in endpoints]
+        paths = [endpoint.path for endpoint in endpoints]
         self.assertIn('/pets', paths)
         self.assertIn('/pets/{petId}', paths)
 
     def test_operation_ids(self):
         """Test that operation IDs are correctly extracted."""
         endpoints = self.parser.get_endpoints()
-        operation_ids = [endpoint['operation_id'] for endpoint in endpoints]
+        operation_ids = [endpoint.operation_id for endpoint in endpoints]
         self.assertIn('listPets', operation_ids)
         self.assertIn('createPets', operation_ids)
         self.assertIn('showPetById', operation_ids)
@@ -303,8 +304,23 @@ class TestOpenAPIParser(unittest.TestCase):
     def test_get_endpoint_by_operation_id(self):
         """Test finding an endpoint by its operation ID."""
         endpoint = self.parser.get_endpoint_by_operation_id('createPets')
-        self.assertEqual(endpoint['method'], 'POST')
-        self.assertEqual(endpoint['path'], '/pets')
+        self.assertEqual(endpoint.method, 'POST')
+        self.assertEqual(endpoint.path, '/pets')
+
+    def test_get_endpoint_by_method_path(self):
+        """Test finding an endpoint by its method and path."""
+        endpoint = self.parser.get_endpoint('POST', '/pets')
+        self.assertIsNotNone(endpoint)
+        self.assertEqual(endpoint.operation_id, 'createPets')
+        
+        # Test with lowercase method
+        endpoint = self.parser.get_endpoint('get', '/pets')
+        self.assertIsNotNone(endpoint)
+        self.assertEqual(endpoint.operation_id, 'listPets')
+        
+        # Test non-existent endpoint
+        endpoint = self.parser.get_endpoint('PUT', '/pets')
+        self.assertIsNone(endpoint)
 
     def test_request_body_schema(self):
         """Test that request body schemas are correctly extracted."""
@@ -312,10 +328,10 @@ class TestOpenAPIParser(unittest.TestCase):
         self.assertEqual(len(endpoints_with_body), 1)  # Only POST /pets has a request body
         
         create_pet_endpoint = endpoints_with_body[0]
-        self.assertEqual(create_pet_endpoint['method'], 'POST')
-        self.assertEqual(create_pet_endpoint['path'], '/pets')
-        self.assertIn('request_body_schema', create_pet_endpoint)
-        self.assertEqual(create_pet_endpoint['request_body_schema']['$ref'], '#/components/schemas/NewPet')
+        self.assertEqual(create_pet_endpoint.method, 'POST')
+        self.assertEqual(create_pet_endpoint.path, '/pets')
+        self.assertIsNotNone(create_pet_endpoint.request_body_schema)
+        self.assertEqual(create_pet_endpoint.request_body_schema['$ref'], '#/components/schemas/NewPet')
 
     def test_query_parameters_schema(self):
         """Test that query parameters schemas are correctly extracted."""
@@ -323,11 +339,11 @@ class TestOpenAPIParser(unittest.TestCase):
         self.assertEqual(len(endpoints_with_query), 1)  # Only GET /pets has query parameters
         
         list_pets_endpoint = endpoints_with_query[0]
-        self.assertEqual(list_pets_endpoint['method'], 'GET')
-        self.assertEqual(list_pets_endpoint['path'], '/pets')
-        self.assertIn('query_parameters_schema', list_pets_endpoint)
+        self.assertEqual(list_pets_endpoint.method, 'GET')
+        self.assertEqual(list_pets_endpoint.path, '/pets')
+        self.assertIsNotNone(list_pets_endpoint.query_parameters_schema)
         
-        query_schema = list_pets_endpoint['query_parameters_schema']
+        query_schema = list_pets_endpoint.query_parameters_schema
         self.assertEqual(query_schema['type'], 'object')
         self.assertIn('properties', query_schema)
         self.assertIn('limit', query_schema['properties'])
@@ -341,10 +357,10 @@ class TestOpenAPIParser(unittest.TestCase):
         self.assertEqual(len(endpoints_with_path), 2)  # Both GET and DELETE /pets/{petId} have path parameters
         
         for endpoint in endpoints_with_path:
-            self.assertEqual(endpoint['path'], '/pets/{petId}')
-            self.assertIn('path_parameters_schema', endpoint)
+            self.assertEqual(endpoint.path, '/pets/{petId}')
+            self.assertIsNotNone(endpoint.path_parameters_schema)
             
-            path_schema = endpoint['path_parameters_schema']
+            path_schema = endpoint.path_parameters_schema
             self.assertEqual(path_schema['type'], 'object')
             self.assertIn('properties', path_schema)
             self.assertIn('petId', path_schema['properties'])
@@ -367,7 +383,7 @@ class TestOpenAPIParser(unittest.TestCase):
     def test_bearer_auth_not_required_by_default(self):
         """Test that bearer auth is not required by default for the regular petstore spec."""
         for endpoint in self.parser.get_endpoints():
-            self.assertFalse(endpoint.get('requires_bearer_auth', False))
+            self.assertFalse(endpoint.requires_bearer_auth)
         
         self.assertEqual(len(self.parser.get_endpoints_requiring_bearer_auth()), 0)
     
@@ -381,16 +397,16 @@ class TestOpenAPIParser(unittest.TestCase):
         
         # GET /pets should not require auth (it overrides global security with empty array)
         get_pets = self.secure_parser.get_endpoint_by_operation_id('listPets')
-        self.assertFalse(get_pets.get('requires_bearer_auth', True))
+        self.assertFalse(get_pets.requires_bearer_auth)
         
         # All other endpoints should require auth
         create_pets = self.secure_parser.get_endpoint_by_operation_id('createPets')
         show_pet = self.secure_parser.get_endpoint_by_operation_id('showPetById')
         delete_pet = self.secure_parser.get_endpoint_by_operation_id('deletePet')
         
-        self.assertTrue(create_pets.get('requires_bearer_auth', False))
-        self.assertTrue(show_pet.get('requires_bearer_auth', False))
-        self.assertTrue(delete_pet.get('requires_bearer_auth', False))
+        self.assertTrue(create_pets.requires_bearer_auth)
+        self.assertTrue(show_pet.requires_bearer_auth)
+        self.assertTrue(delete_pet.requires_bearer_auth)
     
     def test_multiple_security_schemes(self):
         """Test that bearer auth is correctly detected when multiple security schemes are specified."""
@@ -399,7 +415,7 @@ class TestOpenAPIParser(unittest.TestCase):
         
         # POST /pets has both bearer and API key as alternatives
         create_pets = self.secure_parser.get_endpoint_by_operation_id('createPets')
-        self.assertTrue(create_pets.get('requires_bearer_auth', False))
+        self.assertTrue(create_pets.requires_bearer_auth)
 
 
 if __name__ == '__main__':

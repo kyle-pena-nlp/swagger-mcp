@@ -9,7 +9,7 @@ A Python utility for parsing OpenAPI specifications and extracting endpoint info
   - JSON strings
   - YAML strings
   - Python dictionaries
-- Extract detailed endpoint information:
+- Extract detailed endpoint information using a strongly-typed `Endpoint` dataclass:
   - Paths
   - HTTP methods
   - Operation IDs
@@ -23,7 +23,9 @@ A Python utility for parsing OpenAPI specifications and extracting endpoint info
   - Endpoints with query parameters
   - Endpoints with path parameters
   - Endpoints requiring bearer token authentication
-- Find endpoints by operation ID
+- Find endpoints by:
+  - Operation ID
+  - Method + Path combination
 - Convert parsed endpoints to JSON
 
 ## Installation
@@ -41,6 +43,7 @@ If you don't have uv installed, you can install it following the instructions at
 
 ```python
 from openapi_parser import OpenAPIParser
+from endpoint import Endpoint
 
 # Load from a file
 parser = OpenAPIParser('path/to/openapi.json')
@@ -109,7 +112,7 @@ spec = {
 }
 parser = OpenAPIParser(spec)
 
-# Get all endpoints
+# Get all endpoints as a list of Endpoint objects
 endpoints = parser.get_endpoints()
 
 # Get endpoints with request bodies
@@ -126,9 +129,137 @@ endpoints_with_auth = parser.get_endpoints_requiring_bearer_auth()
 
 # Find an endpoint by operation ID
 user_endpoint = parser.get_endpoint_by_operation_id('createUser')
+if user_endpoint:
+    print(f"Found endpoint: {user_endpoint.method} {user_endpoint.path}")
+    if user_endpoint.request_body_schema:
+        print(f"Request body schema: {user_endpoint.request_body_schema}")
+
+# Find an endpoint by method and path
+get_user_endpoint = parser.get_endpoint('GET', '/users/{userId}')
+if get_user_endpoint:
+    print(f"Operation ID: {get_user_endpoint.operation_id}")
+    if get_user_endpoint.path_parameters_schema:
+        print(f"Path parameters: {get_user_endpoint.path_parameters_schema}")
 
 # Convert to JSON
 json_string = parser.to_json()
+```
+
+## Endpoint Dataclass
+
+The `Endpoint` dataclass provides a strongly-typed representation of each API endpoint, with all the information needed to programmatically invoke it:
+
+```python
+# endpoint.py
+from dataclasses import dataclass, field
+from typing import Dict, List, Optional, Any, Set
+
+@dataclass
+class Endpoint:
+    # Basic endpoint information
+    path: str
+    method: str
+    operation_id: str
+    summary: str
+    description: str = ""
+    deprecated: bool = False
+    
+    # Server information
+    servers: List[Dict[str, Any]] = field(default_factory=list)
+    
+    # Authentication and security
+    requires_bearer_auth: bool = False
+    security_requirements: List[Dict[str, List[str]]] = field(default_factory=list)
+    
+    # Request information
+    request_body_schema: Optional[Dict[str, Any]] = None
+    request_body_required: bool = False
+    request_content_types: List[str] = field(default_factory=list)
+    query_parameters_schema: Optional[Dict[str, Any]] = None
+    path_parameters_schema: Optional[Dict[str, Any]] = None
+    header_parameters_schema: Optional[Dict[str, Any]] = None
+    
+    # Response information
+    responses: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+    response_content_types: List[str] = field(default_factory=list)
+    
+    # Additional metadata
+    tags: List[str] = field(default_factory=list)
+    
+    # Utility methods
+    @property
+    def endpoint_key(self) -> str:
+        """Generate a unique key for this endpoint based on method and path."""
+        return f"{self.method} {self.path}"
+        
+    def get_full_url(self, server_url: Optional[str] = None, path_params: Optional[Dict[str, Any]] = None) -> str:
+        """Construct the full URL with path parameters substituted."""
+        # Implementation details...
+        
+    def get_required_parameters(self) -> Dict[str, Set[str]]:
+        """Get all required parameters grouped by type (path, query, header)."""
+        # Implementation details...
+        
+    def get_successful_response_schema(self) -> Optional[Dict[str, Any]]:
+        """Get the schema for a successful response (2xx status code)."""
+        # Implementation details...
+```
+
+### Programmatically Invoking an Endpoint
+
+With the enhanced `Endpoint` class, you can now easily create HTTP clients that can automatically invoke API endpoints:
+
+```python
+from openapi_parser import OpenAPIParser
+from endpoint import Endpoint
+import requests
+import json
+
+# Load the API specification
+parser = OpenAPIParser('api_spec.json')
+
+# Get an endpoint
+endpoint = parser.get_endpoint('GET', '/users/{userId}')
+
+if endpoint:
+    # Prepare the URL with path parameters
+    url = endpoint.get_full_url(
+        server_url="https://api.example.com",  # Or use endpoint.default_server_url
+        path_params={"userId": "123"}
+    )
+    
+    # Prepare query parameters
+    query_params = {"fields": "name,email"}
+    
+    # Prepare headers
+    headers = {}
+    if endpoint.requires_bearer_auth:
+        headers["Authorization"] = "Bearer my-token"
+        
+    # Add content type if sending a request body
+    content_type = None
+    if endpoint.request_content_types:
+        content_type = endpoint.request_content_types[0]
+        headers["Content-Type"] = content_type
+    
+    # Make the request
+    response = requests.request(
+        method=endpoint.method,
+        url=url,
+        params=query_params,
+        headers=headers,
+        # Add request body for POST/PUT/PATCH
+        json={"name": "John"} if endpoint.method in ['POST', 'PUT', 'PATCH'] else None
+    )
+    
+    # Process the response based on expected response schemas
+    if str(response.status_code) in endpoint.responses:
+        print(f"Success: {response.status_code}")
+        # Parse response according to schema
+        data = response.json()
+        print(data)
+    else:
+        print(f"Error: {response.status_code}")
 ```
 
 ## Running Tests
@@ -147,39 +278,42 @@ uv run python -m unittest test_openapi_parser.py
 
 ## Example Output
 
-For each endpoint, the parser produces a dictionary with the following structure:
+The parser produces a list of `Endpoint` objects, which can be converted to JSON:
 
-```python
-{
-    'path': '/users/{userId}',
-    'method': 'GET',
-    'operation_id': 'getUserById',
-    'summary': 'Get user by ID',
-    'requires_bearer_auth': True,  # Indicates bearer token authorization is required
-    'path_parameters_schema': {
-        'type': 'object',
-        'properties': {
-            'userId': {'type': 'string'}
-        },
-        'required': ['userId']
-    },
-    'query_parameters_schema': {
-        'type': 'object',
-        'properties': {
-            'fields': {'type': 'string', 'enum': ['basic', 'full']}
-        }
-    },
-    'request_body_schema': {
-        'type': 'object',
-        'properties': {
-            'name': {'type': 'string'},
-            'email': {'type': 'string'}
-        }
+```json
+[
+  {
+    "path": "/users/{userId}",
+    "method": "GET",
+    "operation_id": "getUserById",
+    "summary": "Get user by ID",
+    "requires_bearer_auth": true,
+    "path_parameters_schema": {
+      "type": "object",
+      "properties": {
+        "userId": {"type": "string"}
+      },
+      "required": ["userId"]
     }
-}
+  },
+  {
+    "path": "/users",
+    "method": "POST",
+    "operation_id": "createUser",
+    "summary": "Create a new user",
+    "requires_bearer_auth": true,
+    "request_body_schema": {
+      "type": "object",
+      "properties": {
+        "name": {"type": "string"},
+        "email": {"type": "string"}
+      }
+    }
+  }
+]
 ```
 
-Note that parameters and request bodies are only included if they exist in the API definition.
+Note that fields like `request_body_schema`, `query_parameters_schema`, and `path_parameters_schema` are only included in the JSON output if they exist in the API definition.
 
 ## License
 

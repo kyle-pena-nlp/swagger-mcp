@@ -1,7 +1,8 @@
 import json
 import yaml
 import os
-from typing import Dict, List, Optional, Any, Union
+from typing import Dict, List, Optional, Any, Union, TypedDict
+from endpoint import Endpoint
 
 
 class OpenAPIParser:
@@ -22,6 +23,7 @@ class OpenAPIParser:
         self.security_schemes = self._parse_security_schemes()
         self.global_security = self.spec.get('security', [])
         self.has_bearer_schemes = self._has_bearer_schemes()
+        self.servers = self.spec.get('servers', [])
         self.endpoints = self._parse_endpoints()
 
     def _has_bearer_schemes(self) -> bool:
@@ -132,24 +134,14 @@ class OpenAPIParser:
         
         return False
 
-    def _parse_endpoints(self) -> List[Dict[str, Any]]:
+    def _parse_endpoints(self) -> Dict[str, Endpoint]:
         """
         Parse the OpenAPI specification to extract endpoints information.
         
         Returns:
-            A list of dictionaries, each containing endpoint details:
-            {
-                'path': str,
-                'method': str,
-                'operation_id': str,
-                'summary': str,
-                'request_body_schema': dict (optional),
-                'query_parameters_schema': dict (optional),
-                'path_parameters_schema': dict (optional),
-                'requires_bearer_auth': bool
-            }
+            A dictionary mapping endpoint keys (method + path) to Endpoint objects
         """
-        result = []
+        result: Dict[str, Endpoint] = {}
         
         # Get the paths from the OpenAPI spec
         paths = self.spec.get('paths', {})
@@ -160,31 +152,40 @@ class OpenAPIParser:
                 if method not in ['get', 'post', 'put', 'delete', 'patch', 'head', 'options', 'trace']:
                     continue
                 
-                endpoint_info = {
-                    'path': path,
-                    'method': method.upper(),
-                    'operation_id': operation.get('operationId', ''),
-                    'summary': operation.get('summary', ''),
-                    'requires_bearer_auth': False  # Default to False
-                }
+                # Create a new endpoint with the basic information
+                endpoint = Endpoint(
+                    path=path,
+                    method=method.upper(),
+                    operation_id=operation.get('operationId', ''),
+                    summary=operation.get('summary', ''),
+                    description=operation.get('description', ''),
+                    deprecated=operation.get('deprecated', False),
+                    requires_bearer_auth=False,  # Default value
+                    servers=operation.get('servers', self.servers.copy()),
+                    tags=operation.get('tags', [])
+                )
                 
                 # Check if this operation requires bearer authorization
                 # First check operation-level security, if present
                 operation_security = operation.get('security')
                 if operation_security is not None:
-                    endpoint_info['requires_bearer_auth'] = self._requires_bearer_auth(operation_security)
+                    endpoint.security_requirements = operation_security
+                    endpoint.requires_bearer_auth = self._requires_bearer_auth(operation_security)
                 elif self.global_security:
                     # Fall back to global security if no operation-level security is defined
-                    endpoint_info['requires_bearer_auth'] = self._requires_bearer_auth(self.global_security)
+                    endpoint.security_requirements = self.global_security
+                    endpoint.requires_bearer_auth = self._requires_bearer_auth(self.global_security)
                 
                 # Extract request body schema if present
                 request_body = operation.get('requestBody', {})
                 if request_body:
+                    endpoint.request_body_required = request_body.get('required', False)
                     content = request_body.get('content', {})
-                    json_content = content.get('application/json', {})
                     
-                    if json_content and 'schema' in json_content:
-                        endpoint_info['request_body_schema'] = json_content['schema']
+                    for content_type, content_info in content.items():
+                        endpoint.request_content_types.append(content_type)
+                        if content_type == 'application/json' and 'schema' in content_info:
+                            endpoint.request_body_schema = content_info['schema']
                 
                 # Extract parameters (both from operation and path item levels)
                 parameters = []
@@ -203,6 +204,7 @@ class OpenAPIParser:
                 # Process parameters into query and path schemas
                 query_params = [p for p in parameters if p.get('in') == 'query']
                 path_params = [p for p in parameters if p.get('in') == 'path']
+                header_params = [p for p in parameters if p.get('in') == 'header']
                 
                 # Create query parameters schema
                 if query_params:
@@ -225,7 +227,7 @@ class OpenAPIParser:
                     if not query_schema['required']:
                         del query_schema['required']
                     
-                    endpoint_info['query_parameters_schema'] = query_schema
+                    endpoint.query_parameters_schema = query_schema
                 
                 # Create path parameters schema
                 if path_params:
@@ -249,58 +251,94 @@ class OpenAPIParser:
                     if not path_schema['required']:
                         del path_schema['required']
                     
-                    endpoint_info['path_parameters_schema'] = path_schema
+                    endpoint.path_parameters_schema = path_schema
                 
-                result.append(endpoint_info)
+                # Create header parameters schema
+                if header_params:
+                    header_schema = {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
+                    }
+                    
+                    for param in header_params:
+                        param_name = param.get('name', '')
+                        param_schema = param.get('schema', {})
+                        
+                        header_schema['properties'][param_name] = param_schema
+                        
+                        if param.get('required', False):
+                            header_schema['required'].append(param_name)
+                    
+                    # Only add required array if there are required parameters
+                    if not header_schema['required']:
+                        del header_schema['required']
+                    
+                    endpoint.header_parameters_schema = header_schema
+                
+                # Extract response information
+                responses = operation.get('responses', {})
+                if responses:
+                    endpoint.responses = responses
+                    
+                    # Extract response content types
+                    for status_code, response in responses.items():
+                        if 'content' in response:
+                            for content_type in response['content']:
+                                if content_type not in endpoint.response_content_types:
+                                    endpoint.response_content_types.append(content_type)
+                
+                # Add the endpoint to the result dictionary, keyed by its endpoint_key
+                result[endpoint.endpoint_key] = endpoint
         
         return result
 
-    def get_endpoints(self) -> List[Dict[str, Any]]:
+    def get_endpoints(self) -> List[Endpoint]:
         """
-        Get the list of all parsed endpoints.
+        Get a list of all parsed endpoints.
         
         Returns:
-            A list of dictionaries containing endpoint information
+            A list of Endpoint objects
         """
-        return self.endpoints
+        return list(self.endpoints.values())
     
-    def get_endpoints_with_request_body(self) -> List[Dict[str, Any]]:
+    def get_endpoints_with_request_body(self) -> List[Endpoint]:
         """
         Get only the endpoints that have a JSON request body.
         
         Returns:
-            A list of dictionaries containing endpoint information with request bodies
+            A list of Endpoint objects with request bodies
         """
-        return [endpoint for endpoint in self.endpoints if 'request_body_schema' in endpoint]
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.request_body_schema is not None]
     
-    def get_endpoints_with_query_parameters(self) -> List[Dict[str, Any]]:
+    def get_endpoints_with_query_parameters(self) -> List[Endpoint]:
         """
         Get only the endpoints that have query parameters.
         
         Returns:
-            A list of dictionaries containing endpoint information with query parameters
+            A list of Endpoint objects with query parameters
         """
-        return [endpoint for endpoint in self.endpoints if 'query_parameters_schema' in endpoint]
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.query_parameters_schema is not None]
     
-    def get_endpoints_with_path_parameters(self) -> List[Dict[str, Any]]:
+    def get_endpoints_with_path_parameters(self) -> List[Endpoint]:
         """
         Get only the endpoints that have path parameters.
         
         Returns:
-            A list of dictionaries containing endpoint information with path parameters
+            A list of Endpoint objects with path parameters
         """
-        return [endpoint for endpoint in self.endpoints if 'path_parameters_schema' in endpoint]
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.path_parameters_schema is not None]
     
-    def get_endpoints_requiring_bearer_auth(self) -> List[Dict[str, Any]]:
+    def get_endpoints_requiring_bearer_auth(self) -> List[Endpoint]:
         """
         Get only the endpoints that require bearer token authentication.
         
         Returns:
-            A list of dictionaries containing endpoint information that require bearer auth
+            A list of Endpoint objects that require bearer auth
         """
-        return [endpoint for endpoint in self.endpoints if endpoint.get('requires_bearer_auth', False)]
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.requires_bearer_auth]
     
-    def get_endpoint_by_operation_id(self, operation_id: str) -> Optional[Dict[str, Any]]:
+    def get_endpoint_by_operation_id(self, operation_id: str) -> Optional[Endpoint]:
         """
         Find an endpoint by its operationId.
         
@@ -308,12 +346,26 @@ class OpenAPIParser:
             operation_id: The operationId to search for
             
         Returns:
-            The endpoint dictionary or None if not found
+            The Endpoint object or None if not found
         """
-        for endpoint in self.endpoints:
-            if endpoint.get('operation_id') == operation_id:
+        for endpoint in self.endpoints.values():
+            if endpoint.operation_id == operation_id:
                 return endpoint
         return None
+    
+    def get_endpoint(self, method: str, path: str) -> Optional[Endpoint]:
+        """
+        Find an endpoint by its method and path.
+        
+        Args:
+            method: HTTP method (GET, POST, etc.)
+            path: URL path
+            
+        Returns:
+            The Endpoint object or None if not found
+        """
+        key = f"{method.upper()} {path}"
+        return self.endpoints.get(key)
 
     def to_json(self) -> str:
         """
@@ -322,7 +374,62 @@ class OpenAPIParser:
         Returns:
             JSON string representation of the endpoints
         """
-        return json.dumps(self.endpoints, indent=2)
+        # Convert endpoints to a list of dictionaries for JSON serialization
+        endpoints_dicts = []
+        for endpoint in self.endpoints.values():
+            endpoint_dict = {
+                'path': endpoint.path,
+                'method': endpoint.method,
+                'operation_id': endpoint.operation_id,
+                'summary': endpoint.summary
+            }
+            
+            # Only include non-empty fields
+            if endpoint.description:
+                endpoint_dict['description'] = endpoint.description
+                
+            if endpoint.deprecated:
+                endpoint_dict['deprecated'] = endpoint.deprecated
+                
+            if endpoint.servers:
+                endpoint_dict['servers'] = endpoint.servers
+                
+            if endpoint.requires_bearer_auth:
+                endpoint_dict['requires_bearer_auth'] = endpoint.requires_bearer_auth
+                
+            if endpoint.security_requirements:
+                endpoint_dict['security_requirements'] = endpoint.security_requirements
+                
+            if endpoint.request_body_schema:
+                endpoint_dict['request_body_schema'] = endpoint.request_body_schema
+                
+            if endpoint.request_body_required:
+                endpoint_dict['request_body_required'] = endpoint.request_body_required
+                
+            if endpoint.request_content_types:
+                endpoint_dict['request_content_types'] = endpoint.request_content_types
+                
+            if endpoint.query_parameters_schema:
+                endpoint_dict['query_parameters_schema'] = endpoint.query_parameters_schema
+                
+            if endpoint.path_parameters_schema:
+                endpoint_dict['path_parameters_schema'] = endpoint.path_parameters_schema
+                
+            if endpoint.header_parameters_schema:
+                endpoint_dict['header_parameters_schema'] = endpoint.header_parameters_schema
+                
+            if endpoint.responses:
+                endpoint_dict['responses'] = endpoint.responses
+                
+            if endpoint.response_content_types:
+                endpoint_dict['response_content_types'] = endpoint.response_content_types
+                
+            if endpoint.tags:
+                endpoint_dict['tags'] = endpoint.tags
+            
+            endpoints_dicts.append(endpoint_dict)
+            
+        return json.dumps(endpoints_dicts, indent=2)
 
 
 # Example usage
