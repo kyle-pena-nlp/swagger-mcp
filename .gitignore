@@ -11,3 +11,4 @@ wheels/
 .environments
 *.log
 .env
+**/node_modules
