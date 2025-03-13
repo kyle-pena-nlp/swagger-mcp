@@ -40,7 +40,8 @@ class OpenAPIMCPServer:
         server_url: Optional[str] = None,
         bearer_token: Optional[str] = None,
         server_version: Optional[str] = "1.0.0",
-        instructions: Optional[str] = None
+        instructions: Optional[str] = None,
+        additional_headers: Optional[Dict[str, str]] = None
     ):
         """
         Initialize the OpenAPI MCP Server.
@@ -52,11 +53,13 @@ class OpenAPIMCPServer:
             bearer_token: Optional bearer token for authenticated requests
             server_version: Optional server version
             instructions: Optional instructions for the server
+            additional_headers: Optional dictionary of additional headers to include in all requests
         """
         self.server_name = server_name
         self.server_version = server_version or "1.0.0"  # Ensure server_version is not None
         self.server_url = server_url
         self.bearer_token = bearer_token
+        self.additional_headers = additional_headers or {}
         
         # Create the MCP server
         self.server = Server(
@@ -169,7 +172,8 @@ class OpenAPIMCPServer:
                 response = invoker.invoke_with_params(
                     params=arguments,
                     server_url=self.server_url,
-                    bearer_token=self.bearer_token
+                    bearer_token=self.bearer_token,
+                    headers=self.additional_headers
                 )
                 
                 logger.info(f"Response status code: {response.status_code}")
@@ -216,7 +220,8 @@ def run_server(
     openapi_spec: str,  # Changed parameter name from openapi_spec_path to openapi_spec
     server_name: str = "OpenAPI-MCP-Server",
     server_url: Optional[str] = None,
-    bearer_token: Optional[str] = None
+    bearer_token: Optional[str] = None,
+    additional_headers: Optional[Dict[str, str]] = None
 ):
     """
     Run an OpenAPI MCP Server with the given parameters.
@@ -226,18 +231,20 @@ def run_server(
         server_name: Name for the MCP server
         server_url: Base URL for API calls (overrides servers in spec)
         bearer_token: Optional bearer token for authenticated requests
-        host: Host to bind to
-        port: Port to listen on
+        additional_headers: Optional dictionary of additional headers to include in all requests
     """
     logger.info(f"Starting OpenAPI MCP Server: {server_name}")
     logger.info(f"OpenAPI spec: {openapi_spec}")
     logger.info(f"Server URL: {server_url}")
+    if additional_headers:
+        logger.info(f"Additional headers: {json.dumps(additional_headers)}")
     
     server = OpenAPIMCPServer(
         server_name=server_name,
         openapi_spec=openapi_spec,
         server_url=server_url,
-        bearer_token=bearer_token
+        bearer_token=bearer_token,
+        additional_headers=additional_headers
     )
     
     logger.info("Server initialized, starting main loop")
@@ -253,12 +260,24 @@ if __name__ == "__main__":
     parser.add_argument("--name", help="Server name")
     parser.add_argument("--url", help="Base URL for API calls (overrides servers in spec)")
     parser.add_argument("--token", help="Bearer token for authenticated requests")
+    parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
     
     args = parser.parse_args()
+    
+    # Process headers into a dictionary if provided
+    additional_headers = {}
+    if args.headers:
+        for header in args.headers:
+            try:
+                key, value = header.split(':', 1)
+                additional_headers[key.strip()] = value.strip()
+            except ValueError:
+                print(f"Warning: Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
     
     run_server(
         openapi_spec=args.spec,
         server_name=args.name,
         server_url=args.url,
-        bearer_token=args.token
+        bearer_token=args.token,
+        additional_headers=additional_headers if additional_headers else None
     ) 
