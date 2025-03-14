@@ -277,7 +277,25 @@ class EndpointInvoker:
                 # and let requests set it with the boundary parameter
                 if headers and 'Content-Type' in headers:
                     del headers['Content-Type']
-                files = form_params
+                
+                # Separate file fields from regular form fields
+                files = {}
+                data = {}
+                
+                for key, value in form_params.items():
+                    # Check if the value represents a file (could be a file-like object or a tuple)
+                    # Common file-like objects have 'read' and 'name' attributes
+                    is_file = (hasattr(value, 'read') and callable(value.read)) or isinstance(value, tuple)
+                    
+                    if is_file:
+                        files[key] = value
+                    else:
+                        data[key] = value
+                
+                # If no files were found, treat all as regular form data
+                if not files:
+                    data = form_params
+                    files = None
             elif content_type == 'application/x-www-form-urlencoded':
                 data = form_params
             else:
@@ -381,7 +399,16 @@ Request details:
         prepared_headers = headers.copy() if headers else {}
         
         # Check if bearer token is required
-        if endpoint_to_use.requires_bearer_auth:
+        auth_required = False
+        
+        if hasattr(endpoint_to_use, 'requires_bearer_auth') and endpoint_to_use.requires_bearer_auth:
+            auth_required = True
+            
+        # Check if OAuth is required
+        if hasattr(endpoint_to_use, 'requires_oauth') and endpoint_to_use.requires_oauth:
+            auth_required = True
+            
+        if auth_required:
             if not bearer_token:
                 raise MissingBearerTokenError()
             prepared_headers['Authorization'] = f"Bearer {bearer_token}"

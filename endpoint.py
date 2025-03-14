@@ -21,7 +21,9 @@ class Endpoint:
     
     # Authentication and security
     requires_bearer_auth: bool = False
+    requires_oauth: bool = False  # Indicates if OAuth flow authentication is required
     security_requirements: List[Dict[str, List[str]]] = field(default_factory=list)
+    oauth_scopes: List[str] = field(default_factory=list)  # OAuth scopes required for this endpoint
     
     # Request information
     request_body_schema: Optional[Dict[str, Any]] = None

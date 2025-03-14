@@ -88,7 +88,13 @@ class OpenAPIParser:
             Dictionary of security scheme names to their definitions
         """
         components = self.spec.get('components', {})
-        return components.get('securitySchemes', {})
+        security_schemes = components.get('securitySchemes', {})
+        
+        # Check for OpenAPI v2 style security definitions
+        if not security_schemes and 'securityDefinitions' in self.spec:
+            security_schemes = self.spec.get('securityDefinitions', {})
+            
+        return security_schemes
     
     def _is_bearer_scheme(self, scheme_name: str) -> bool:
         """
@@ -101,10 +107,22 @@ class OpenAPIParser:
             True if the scheme is a bearer token scheme, False otherwise
         """
         scheme = self.security_schemes.get(scheme_name, {})
-        return (
-            scheme.get('type') == 'http' and 
-            scheme.get('scheme', '').lower() == 'bearer'
-        )
+        
+        # Check for OpenAPI v3 style http bearer scheme
+        if (scheme.get('type') == 'http' and 
+            scheme.get('scheme', '').lower() == 'bearer'):
+            return True
+            
+        # Check for OpenAPI v3 style OAuth2 scheme
+        if scheme.get('type') == 'oauth2' and scheme.get('flows', {}):
+            return True
+            
+        # Check for OpenAPI v2 style OAuth2 scheme
+        if (scheme.get('type') == 'oauth2' and 
+            (scheme.get('flow') or scheme.get('authorizationUrl'))):
+            return True
+            
+        return False
     
     def _requires_bearer_auth(self, security_requirements: List[Dict[str, Any]]) -> bool:
         """
@@ -132,6 +150,58 @@ class OpenAPIParser:
             if any(self._is_bearer_scheme(scheme_name) for scheme_name in requirement):
                 return True
         
+        return False
+        
+    def _get_oauth_scopes(self, security_requirements: List[Dict[str, Any]]) -> List[str]:
+        """
+        Extract OAuth scopes from security requirements.
+        
+        Args:
+            security_requirements: List of security requirement objects
+            
+        Returns:
+            List of OAuth scopes required for the endpoint
+        """
+        scopes = []
+        
+        for requirement in security_requirements:
+            for scheme_name, scheme_scopes in requirement.items():
+                scheme = self.security_schemes.get(scheme_name, {})
+                if scheme.get('type') == 'oauth2' and scheme_scopes:
+                    scopes.extend(scheme_scopes)
+        
+        return list(set(scopes))  # Remove duplicates
+        
+    def _is_oauth_scheme(self, scheme_name: str) -> bool:
+        """
+        Determine if a security scheme is an OAuth scheme.
+        
+        Args:
+            scheme_name: The name of the security scheme
+            
+        Returns:
+            True if the scheme is an OAuth scheme, False otherwise
+        """
+        scheme = self.security_schemes.get(scheme_name, {})
+        return scheme.get('type') == 'oauth2'
+        
+    def _requires_oauth(self, security_requirements: List[Dict[str, Any]]) -> bool:
+        """
+        Determine if a set of security requirements includes OAuth authentication.
+        
+        Args:
+            security_requirements: List of security requirement objects
+            
+        Returns:
+            True if OAuth authentication is required, False otherwise
+        """
+        if not security_requirements:
+            return False
+            
+        for requirement in security_requirements:
+            if any(self._is_oauth_scheme(scheme_name) for scheme_name in requirement):
+                return True
+                
         return False
 
     def _parse_endpoints(self) -> Dict[str, Endpoint]:
@@ -161,20 +231,27 @@ class OpenAPIParser:
                     description=operation.get('description', ''),
                     deprecated=operation.get('deprecated', False),
                     requires_bearer_auth=False,  # Default value
+                    requires_oauth=False,  # Default value
                     servers=operation.get('servers', self.servers.copy()),
                     tags=operation.get('tags', [])
                 )
                 
-                # Check if this operation requires bearer authorization
+                # Check if this operation requires bearer authorization or OAuth
                 # First check operation-level security, if present
                 operation_security = operation.get('security')
                 if operation_security is not None:
                     endpoint.security_requirements = operation_security
                     endpoint.requires_bearer_auth = self._requires_bearer_auth(operation_security)
+                    endpoint.requires_oauth = self._requires_oauth(operation_security)
+                    if endpoint.requires_oauth:
+                        endpoint.oauth_scopes = self._get_oauth_scopes(operation_security)
                 elif self.global_security:
                     # Fall back to global security if no operation-level security is defined
                     endpoint.security_requirements = self.global_security
                     endpoint.requires_bearer_auth = self._requires_bearer_auth(self.global_security)
+                    endpoint.requires_oauth = self._requires_oauth(self.global_security)
+                    if endpoint.requires_oauth:
+                        endpoint.oauth_scopes = self._get_oauth_scopes(self.global_security)
                 
                 # Extract request body schema if present
                 request_body = operation.get('requestBody', {})
@@ -383,12 +460,21 @@ class OpenAPIParser:
     
     def get_endpoints_requiring_bearer_auth(self) -> List[Endpoint]:
         """
-        Get a list of all endpoints that require bearer authentication.
+        Get all endpoints that require bearer token authentication.
         
         Returns:
             List of Endpoint objects that require bearer token authentication
         """
         return [endpoint for endpoint in self.endpoints.values() if endpoint.requires_bearer_auth]
+    
+    def get_endpoints_requiring_oauth(self) -> List[Endpoint]:
+        """
+        Get all endpoints that require OAuth authentication.
+        
+        Returns:
+            List of Endpoint objects that require OAuth authentication
+        """
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.requires_oauth]
     
     def get_endpoint_by_operation_id(self, operation_id: str) -> Optional[Endpoint]:
         """

@@ -22,7 +22,9 @@ class SimpleEndpoint:
     
     # Authentication and security
     requires_bearer_auth: bool = False
+    requires_oauth: bool = False  # Indicates if OAuth flow authentication is required
     security_requirements: List[Dict[str, List[str]]] = field(default_factory=list)
+    oauth_scopes: List[str] = field(default_factory=list)  # OAuth scopes required for this endpoint
     
     # Combined parameter information
     combined_parameter_schema: Dict[str, Any] = field(default_factory=dict)
@@ -235,6 +237,8 @@ def create_simple_endpoint(endpoint: Endpoint) -> SimpleEndpoint:
         deprecated=endpoint.deprecated,
         servers=endpoint.servers,
         requires_bearer_auth=endpoint.requires_bearer_auth,
+        requires_oauth=endpoint.requires_oauth,
+        oauth_scopes=endpoint.oauth_scopes,
         security_requirements=endpoint.security_requirements,
         combined_parameter_schema=combined_schema,
         parameter_type_mapping=parameter_type_mapping,
