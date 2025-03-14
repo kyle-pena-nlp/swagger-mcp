@@ -30,6 +30,7 @@ class Endpoint:
     query_parameters_schema: Optional[Dict[str, Any]] = None
     path_parameters_schema: Optional[Dict[str, Any]] = None
     header_parameters_schema: Optional[Dict[str, Any]] = None
+    form_parameters_schema: Optional[Dict[str, Any]] = None
     
     # Response information
     responses: Dict[str, Dict[str, Any]] = field(default_factory=dict)
@@ -104,12 +105,13 @@ class Endpoint:
         Get a dictionary of all required parameters grouped by parameter type.
         
         Returns:
-            Dictionary with keys 'path', 'query', 'header' and values as sets of parameter names
+            Dictionary with keys 'path', 'query', 'header', 'form' and values as sets of parameter names
         """
         required_params = {
             'path': set(),
             'query': set(),
-            'header': set()
+            'header': set(),
+            'form': set()
         }
         
         # Path parameters - these are usually all required in OpenAPI
@@ -123,6 +125,10 @@ class Endpoint:
         # Header parameters
         if self.header_parameters_schema and 'required' in self.header_parameters_schema:
             required_params['header'] = set(self.header_parameters_schema['required'])
+            
+        # Form parameters
+        if self.form_parameters_schema and 'required' in self.form_parameters_schema:
+            required_params['form'] = set(self.form_parameters_schema['required'])
             
         return required_params
     

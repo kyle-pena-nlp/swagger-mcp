@@ -201,10 +201,11 @@ class OpenAPIParser:
                     parameters = [p for p in parameters if (p.get('name', ''), p.get('in', '')) not in operation_param_names]
                     parameters.extend(operation.get('parameters', []))
                 
-                # Process parameters into query and path schemas
+                # Process parameters into query, path, header, and form schemas
                 query_params = [p for p in parameters if p.get('in') == 'query']
                 path_params = [p for p in parameters if p.get('in') == 'path']
                 header_params = [p for p in parameters if p.get('in') == 'header']
+                form_params = [p for p in parameters if p.get('in') == 'formData']
                 
                 # Create query parameters schema
                 if query_params:
@@ -276,7 +277,49 @@ class OpenAPIParser:
                     
                     endpoint.header_parameters_schema = header_schema
                 
-                # Extract response information
+                # Create form parameters schema
+                if form_params:
+                    form_schema = {
+                        'type': 'object',
+                        'properties': {},
+                        'required': []
+                    }
+                    
+                    for param in form_params:
+                        param_name = param.get('name', '')
+                        param_schema = param.get('schema', {}) or {}
+                        
+                        # Some OpenAPI 2.0 specs use 'type' directly instead of 'schema'
+                        if not param_schema and 'type' in param:
+                            param_schema = {'type': param.get('type')}
+                            if 'format' in param:
+                                param_schema['format'] = param.get('format')
+                            if 'enum' in param:
+                                param_schema['enum'] = param.get('enum')
+                            if 'default' in param:
+                                param_schema['default'] = param.get('default')
+                            if 'description' in param:
+                                param_schema['description'] = param.get('description')
+                        
+                        form_schema['properties'][param_name] = param_schema
+                        
+                        if param.get('required', False):
+                            form_schema['required'].append(param_name)
+                    
+                    # Only add required array if there are required parameters
+                    if not form_schema['required']:
+                        del form_schema['required']
+                    
+                    endpoint.form_parameters_schema = form_schema
+                    
+                    # Add multipart/form-data and application/x-www-form-urlencoded content types
+                    # if not already added via request body
+                    if 'multipart/form-data' not in endpoint.request_content_types:
+                        endpoint.request_content_types.append('multipart/form-data')
+                    if 'application/x-www-form-urlencoded' not in endpoint.request_content_types:
+                        endpoint.request_content_types.append('application/x-www-form-urlencoded')
+                
+                # Extract response schemas
                 responses = operation.get('responses', {})
                 if responses:
                     endpoint.responses = responses
@@ -288,7 +331,7 @@ class OpenAPIParser:
                                 if content_type not in endpoint.response_content_types:
                                     endpoint.response_content_types.append(content_type)
                 
-                # Add the endpoint to the result dictionary, keyed by its endpoint_key
+                # Add the endpoint to the result
                 result[endpoint.endpoint_key] = endpoint
         
         return result
@@ -322,19 +365,28 @@ class OpenAPIParser:
     
     def get_endpoints_with_path_parameters(self) -> List[Endpoint]:
         """
-        Get only the endpoints that have path parameters.
+        Get a list of all endpoints that have path parameters.
         
         Returns:
-            A list of Endpoint objects with path parameters
+            List of Endpoint objects that have path parameters
         """
         return [endpoint for endpoint in self.endpoints.values() if endpoint.path_parameters_schema is not None]
     
-    def get_endpoints_requiring_bearer_auth(self) -> List[Endpoint]:
+    def get_endpoints_with_form_parameters(self) -> List[Endpoint]:
         """
-        Get only the endpoints that require bearer token authentication.
+        Get a list of all endpoints that have form parameters.
         
         Returns:
-            A list of Endpoint objects that require bearer auth
+            List of Endpoint objects that have form parameters
+        """
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.form_parameters_schema is not None]
+    
+    def get_endpoints_requiring_bearer_auth(self) -> List[Endpoint]:
+        """
+        Get a list of all endpoints that require bearer authentication.
+        
+        Returns:
+            List of Endpoint objects that require bearer token authentication
         """
         return [endpoint for endpoint in self.endpoints.values() if endpoint.requires_bearer_auth]
     

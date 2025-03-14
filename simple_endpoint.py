@@ -135,6 +135,19 @@ class SimpleEndpoint:
         return {k: v for k, v in params.items() 
                 if k in self.parameter_type_mapping and self.parameter_type_mapping[k] == 'query'}
     
+    def get_form_parameters(self, params: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Extract form parameters from the combined parameters.
+        
+        Args:
+            params: Combined parameters dictionary
+            
+        Returns:
+            Dictionary containing only form parameters
+        """
+        return {k: v for k, v in params.items() 
+                if k in self.parameter_type_mapping and self.parameter_type_mapping[k] == 'form'}
+    
     def get_request_body(self, params: Dict[str, Any]) -> Dict[str, Any]:
         """
         Extract request body parameters from the combined parameters.
@@ -145,7 +158,7 @@ class SimpleEndpoint:
         Returns:
             Dictionary containing only request body parameters
         """
-        # Parameters that are not path or query are considered request body parameters
+        # Parameters that are not path, query, or form are considered request body parameters
         return {k: v for k, v in params.items() 
                 if k not in self.parameter_type_mapping or self.parameter_type_mapping[k] == 'body'}
     
@@ -190,21 +203,27 @@ def create_simple_endpoint(endpoint: Endpoint) -> SimpleEndpoint:
         if 'required' in endpoint.query_parameters_schema:
             combined_schema['required'].extend(endpoint.query_parameters_schema['required'])
     
+    # Add form parameters to the combined schema
+    if endpoint.form_parameters_schema and 'properties' in endpoint.form_parameters_schema:
+        for param_name, param_schema in endpoint.form_parameters_schema['properties'].items():
+            combined_schema['properties'][param_name] = param_schema
+            parameter_type_mapping[param_name] = 'form'
+            
+        # Add required form parameters
+        if 'required' in endpoint.form_parameters_schema:
+            combined_schema['required'].extend(endpoint.form_parameters_schema['required'])
+    
     # Add request body parameters to the combined schema
     if endpoint.request_body_schema:
         # For simplicity, we'll assume JSON content type and look for a schema
-        for content_type in endpoint.request_content_types:
-            if content_type == 'application/json' and 'schema' in endpoint.request_body_schema:
-                body_schema = endpoint.request_body_schema['schema']
-                if 'properties' in body_schema:
-                    for param_name, param_schema in body_schema['properties'].items():
-                        combined_schema['properties'][param_name] = param_schema
-                        parameter_type_mapping[param_name] = 'body'
-                    
-                    # Add required body parameters
-                    if 'required' in body_schema:
-                        combined_schema['required'].extend(body_schema['required'])
-                break
+        if 'properties' in endpoint.request_body_schema:
+            for param_name, param_schema in endpoint.request_body_schema['properties'].items():
+                combined_schema['properties'][param_name] = param_schema
+                parameter_type_mapping[param_name] = 'body'
+            
+            # Add required body parameters
+            if 'required' in endpoint.request_body_schema:
+                combined_schema['required'].extend(endpoint.request_body_schema['required'])
     
     # Create the SimpleEndpoint with the combined schema
     return SimpleEndpoint(

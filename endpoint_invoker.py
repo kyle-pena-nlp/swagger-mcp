@@ -1,7 +1,21 @@
-import requests
+from logging.handlers import RotatingFileHandler
+import requests, json
+import logging
 from typing import Dict, List, Any, Optional, Union
 from endpoint import Endpoint
 from simple_endpoint import SimpleEndpoint, create_simple_endpoint
+
+logging.basicConfig(level=logging.INFO, 
+                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+                   handlers=[
+                       logging.StreamHandler(),  # Console handler
+                       RotatingFileHandler(
+                           'openapi_mcp_server.log',
+                           maxBytes=10485760,  # 10MB
+                           backupCount=5
+                       )
+                   ])
+logger = logging.getLogger(__name__)
 
 
 class EndpointInvocationError(Exception):
@@ -21,6 +35,13 @@ class MissingQueryParameterError(EndpointInvocationError):
     def __init__(self, param_name: str):
         self.param_name = param_name
         super().__init__(f"Missing required query parameter: {param_name}")
+
+
+class MissingFormParameterError(EndpointInvocationError):
+    """Exception raised when a required form parameter is missing."""
+    def __init__(self, param_name: str):
+        self.param_name = param_name
+        super().__init__(f"Missing required form parameter: {param_name}")
 
 
 class MissingHeaderParameterError(EndpointInvocationError):
@@ -122,9 +143,10 @@ class EndpointInvoker:
                 if param_name not in params:
                     raise MissingRequiredParameterError(param_name)
         
-        # Extract path, query, and body parameters
+        # Extract path, query, form, and body parameters
         path_params = simple_endpoint.get_path_parameters(params) if params else {}
         query_params = simple_endpoint.get_query_parameters(params) if params else {}
+        form_params = simple_endpoint.get_form_parameters(params) if params else {}
         request_body = simple_endpoint.get_request_body(params) if params else None
         
         # If we have a request body but it's empty, set it to None unless it's required
@@ -137,6 +159,7 @@ class EndpointInvoker:
             server_url=server_url,
             path_params=path_params,
             query_params=query_params,
+            form_params=form_params,
             headers=headers,
             request_body=request_body,
             bearer_token=bearer_token,
@@ -148,6 +171,7 @@ class EndpointInvoker:
                server_url: Optional[str] = None,
                path_params: Optional[Dict[str, Any]] = None,
                query_params: Optional[Dict[str, Any]] = None,
+               form_params: Optional[Dict[str, Any]] = None,
                headers: Optional[Dict[str, str]] = None,
                request_body: Optional[Any] = None,
                bearer_token: Optional[str] = None,
@@ -159,6 +183,7 @@ class EndpointInvoker:
             server_url: Server URL to use (overrides endpoint's servers)
             path_params: Parameters to substitute in the path
             query_params: Query parameters to include in the URL
+            form_params: Form data parameters (for multipart/form-data or application/x-www-form-urlencoded)
             headers: HTTP headers to include in the request
             request_body: Body of the request (for POST, PUT, PATCH)
             bearer_token: Bearer token for authentication
@@ -178,6 +203,7 @@ class EndpointInvoker:
             server_url=server_url,
             path_params=path_params,
             query_params=query_params,
+            form_params=form_params,
             headers=headers,
             request_body=request_body,
             bearer_token=bearer_token,
@@ -189,6 +215,7 @@ class EndpointInvoker:
                         server_url: Optional[str] = None,
                         path_params: Optional[Dict[str, Any]] = None,
                         query_params: Optional[Dict[str, Any]] = None,
+                        form_params: Optional[Dict[str, Any]] = None,
                         headers: Optional[Dict[str, str]] = None,
                         request_body: Optional[Any] = None,
                         bearer_token: Optional[str] = None,
@@ -201,6 +228,7 @@ class EndpointInvoker:
             server_url: Server URL to use (overrides endpoint's servers)
             path_params: Parameters to substitute in the path
             query_params: Query parameters to include in the URL
+            form_params: Form data parameters (for multipart/form-data or application/x-www-form-urlencoded)
             headers: HTTP headers to include in the request
             request_body: Body of the request (for POST, PUT, PATCH)
             bearer_token: Bearer token for authentication
@@ -220,18 +248,73 @@ class EndpointInvoker:
         url = self._build_url(server_url, path_params, endpoint_to_use)
         headers = self._prepare_headers(headers, bearer_token, endpoint_to_use)
         query_params = self._validate_query_params(query_params, endpoint_to_use)
+        form_params = self._validate_form_params(form_params, endpoint_to_use)
         request_body = self._validate_request_body(request_body, endpoint_to_use)
         
         # Get HTTP method
         method = endpoint_to_use.method
         
+        # Determine content type and data format
+        content_type = None
+        if headers and 'Content-Type' in headers:
+            content_type = headers['Content-Type']
+        elif endpoint_to_use.request_content_types:
+            # Use the first available content type as default
+            content_type = endpoint_to_use.request_content_types[0]
+            # Add content type to headers
+            if headers is None:
+                headers = {}
+            headers['Content-Type'] = content_type
+        
+        # Prepare request based on content type
+        data = None
+        files = None
+        json_data = None
+        
+        if form_params:
+            if content_type == 'multipart/form-data':
+                # For multipart/form-data, we need to remove the Content-Type header
+                # and let requests set it with the boundary parameter
+                if headers and 'Content-Type' in headers:
+                    del headers['Content-Type']
+                files = form_params
+            elif content_type == 'application/x-www-form-urlencoded':
+                data = form_params
+            else:
+                # Default to application/x-www-form-urlencoded if no specific content type is set
+                data = form_params
+        elif request_body is not None:
+            if content_type and 'json' in content_type:
+                json_data = request_body
+            else:
+                data = request_body
+        
+        
+        # Create a detailed log message with all request components
+        log_message = f"""
+Request details:
+  Method: {method}
+  URL: {url}
+  Query Parameters: {json.dumps(query_params, indent=2, default=str) if query_params else 'None'}
+  Headers: {json.dumps({k: '***' if k.lower() in ('authorization', 'api-key', 'token') else v 
+                        for k, v in headers.items()} if headers else {}, indent=2, default=str)}
+  JSON Data: {json.dumps(json_data, indent=2, default=str) if json_data else 'None'}
+  Form Data: {json.dumps(data, indent=2, default=str) if data else 'None'}
+  Files: {json.dumps({k: f"<{type(v).__name__}>" for k, v in files.items()} if files else 'None', indent=2, default=str)}
+  Timeout: {timeout}
+  Bearer Token: {bearer_token}
+"""
+        logger.info(log_message)
+
         # Make the request
         return requests.request(
             method=method,
             url=url,
             params=query_params,
             headers=headers,
-            json=request_body if request_body is not None else None,
+            json=json_data,
+            data=data,
+            files=files,
             timeout=timeout
         )
     
@@ -359,25 +442,63 @@ class EndpointInvoker:
                 
         return query_params
     
-    def _validate_request_body(self, 
-                              request_body: Optional[Any],
-                              endpoint_to_use: Union[Endpoint, SimpleEndpoint]) -> Optional[Any]:
+    def _validate_form_params(self, 
+                          form_params: Optional[Dict[str, Any]],
+                          endpoint_to_use: Union[Endpoint, SimpleEndpoint]) -> Dict[str, Any]:
         """
-        Validate that a request body is provided if required.
+        Validate form parameters against the endpoint's form parameters schema.
         
         Args:
-            request_body: Body of the request
-            endpoint_to_use: The endpoint to use for validation
+            form_params: Form parameters to validate
+            endpoint_to_use: The endpoint containing the form parameter schema
             
         Returns:
-            Validated request body
+            Validated form parameters (defaults to empty dict if None provided)
+            
+        Raises:
+            MissingFormParameterError: If a required form parameter is missing
+        """
+        # Default to empty dict if None
+        form_params = form_params or {}
+        
+        # Check if this is a SimpleEndpoint
+        if isinstance(endpoint_to_use, SimpleEndpoint):
+            # For SimpleEndpoint, we don't need to check further as all validation
+            # is done at the combined parameter level in invoke_with_params
+            return form_params
+        
+        # For regular Endpoint, check required form parameters
+        if hasattr(endpoint_to_use, 'form_parameters_schema') and endpoint_to_use.form_parameters_schema:
+            if 'required' in endpoint_to_use.form_parameters_schema:
+                for param_name in endpoint_to_use.form_parameters_schema['required']:
+                    if param_name not in form_params:
+                        raise MissingFormParameterError(param_name)
+        
+        return form_params
+    
+    def _validate_request_body(self, 
+                          request_body: Optional[Any],
+                          endpoint_to_use: Union[Endpoint, SimpleEndpoint]) -> Optional[Any]:
+        """
+        Validate request body against the endpoint's request body schema.
+        
+        Args:
+            request_body: Request body to validate
+            endpoint_to_use: The endpoint containing the request body schema
+            
+        Returns:
+            Validated request body (or None if not required)
             
         Raises:
             MissingRequestBodyError: If a request body is required but not provided
         """
-        # For SimpleEndpoint, we don't validate request body here as it's done in invoke_with_params
-        # For regular Endpoint, check if request body is required
-        if isinstance(endpoint_to_use, Endpoint) and endpoint_to_use.requires_request_body() and request_body is None:
+        # Check if a request body is required
+        requires_body = False
+        if hasattr(endpoint_to_use, 'request_body_required'):
+            requires_body = endpoint_to_use.request_body_required
+        
+        # If the body is required but not provided, raise an error
+        if requires_body and request_body is None:
             raise MissingRequestBodyError()
-            
+        
         return request_body 
