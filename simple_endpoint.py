@@ -22,6 +22,7 @@ class SimpleEndpoint:
     
     # Authentication and security
     requires_bearer_auth: bool = False
+    requires_oauth_auth: bool = False
     security_requirements: List[Dict[str, List[str]]] = field(default_factory=list)
     
     # Combined parameter information
@@ -235,6 +236,7 @@ def create_simple_endpoint(endpoint: Endpoint) -> SimpleEndpoint:
         deprecated=endpoint.deprecated,
         servers=endpoint.servers,
         requires_bearer_auth=endpoint.requires_bearer_auth,
+        requires_oauth_auth=endpoint.requires_oauth_auth,
         security_requirements=endpoint.security_requirements,
         combined_parameter_schema=combined_schema,
         parameter_type_mapping=parameter_type_mapping,

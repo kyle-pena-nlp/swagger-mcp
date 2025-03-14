@@ -23,6 +23,7 @@ class OpenAPIParser:
         self.security_schemes = self._parse_security_schemes()
         self.global_security = self.spec.get('security', [])
         self.has_bearer_schemes = self._has_bearer_schemes()
+        self.has_oauth_schemes = self._has_oauth_schemes()
         self.servers = self.spec.get('servers', [])
         self.endpoints = self._parse_endpoints()
 
@@ -34,6 +35,15 @@ class OpenAPIParser:
             True if at least one bearer token scheme is defined, False otherwise
         """
         return any(self._is_bearer_scheme(scheme_name) for scheme_name in self.security_schemes)
+
+    def _has_oauth_schemes(self) -> bool:
+        """
+        Determine if any security schemes are OAuth 2.0 with authorization code flow.
+        
+        Returns:
+            True if at least one OAuth 2.0 scheme with authorization code flow is defined, False otherwise
+        """
+        return any(self._is_oauth_auth_code_scheme(scheme_name) for scheme_name in self.security_schemes)
 
     def _load_spec(self, spec: Union[str, dict]) -> dict:
         """
@@ -87,8 +97,15 @@ class OpenAPIParser:
         Returns:
             Dictionary of security scheme names to their definitions
         """
+        # Try OpenAPI 3.0 style first (under components)
         components = self.spec.get('components', {})
-        return components.get('securitySchemes', {})
+        schemes = components.get('securitySchemes', {})
+        
+        # If not found, try OpenAPI 2.0 style (securityDefinitions)
+        if not schemes and 'securityDefinitions' in self.spec:
+            schemes = self.spec.get('securityDefinitions', {})
+            
+        return schemes
     
     def _is_bearer_scheme(self, scheme_name: str) -> bool:
         """
@@ -105,7 +122,31 @@ class OpenAPIParser:
             scheme.get('type') == 'http' and 
             scheme.get('scheme', '').lower() == 'bearer'
         )
-    
+
+    def _is_oauth_auth_code_scheme(self, scheme_name: str) -> bool:
+        """
+        Determine if a security scheme is an OAuth 2.0 scheme with authorization code flow.
+        
+        Args:
+            scheme_name: The name of the security scheme
+            
+        Returns:
+            True if the scheme is an OAuth 2.0 scheme with authorization code flow, False otherwise
+        """
+        scheme = self.security_schemes.get(scheme_name, {})
+        
+        # OpenAPI 3.0 style
+        if (scheme.get('type') == 'oauth2' and 
+            'flows' in scheme and
+            ('authorizationCode' in scheme['flows'] or 'accessCode' in scheme['flows'])):
+            return True
+            
+        # OpenAPI 2.0 (Swagger) style like in Slack's API
+        if (scheme.get('flow') == 'accessCode' or scheme.get('flow') == 'authorizationCode') and 'authorizationUrl' in scheme:
+            return True
+            
+        return False
+
     def _requires_bearer_auth(self, security_requirements: List[Dict[str, Any]]) -> bool:
         """
         Determine if a set of security requirements includes bearer token authentication.
@@ -130,6 +171,34 @@ class OpenAPIParser:
         for requirement in security_requirements:
             # Check if any of the schemes in this requirement is a bearer scheme
             if any(self._is_bearer_scheme(scheme_name) for scheme_name in requirement):
+                return True
+        
+        return False
+
+    def _requires_oauth_auth(self, security_requirements: List[Dict[str, Any]]) -> bool:
+        """
+        Determine if a set of security requirements includes OAuth 2.0 authentication with auth code flow.
+        
+        Args:
+            security_requirements: List of security requirement objects
+            
+        Returns:
+            True if OAuth 2.0 authentication with auth code flow is required, False otherwise
+        """
+        # If there are no OAuth schemes defined, no endpoint requires OAuth auth
+        if not self.has_oauth_schemes:
+            return False
+        
+        # If no security requirements are specified, no OAuth auth is required
+        if not security_requirements:
+            return False
+        
+        # In OpenAPI, security requirements are a list of objects, where each object
+        # represents an alternative security requirement (OR relationship).
+        # Inside each object, keys are security scheme names and values are scopes (AND relationship).
+        for requirement in security_requirements:
+            # Check if any of the schemes in this requirement is an OAuth scheme
+            if any(self._is_oauth_auth_code_scheme(scheme_name) for scheme_name in requirement):
                 return True
         
         return False
@@ -161,20 +230,23 @@ class OpenAPIParser:
                     description=operation.get('description', ''),
                     deprecated=operation.get('deprecated', False),
                     requires_bearer_auth=False,  # Default value
+                    requires_oauth_auth=False,   # Default value
                     servers=operation.get('servers', self.servers.copy()),
                     tags=operation.get('tags', [])
                 )
                 
-                # Check if this operation requires bearer authorization
+                # Check if this operation requires bearer or OAuth authorization
                 # First check operation-level security, if present
                 operation_security = operation.get('security')
                 if operation_security is not None:
                     endpoint.security_requirements = operation_security
                     endpoint.requires_bearer_auth = self._requires_bearer_auth(operation_security)
+                    endpoint.requires_oauth_auth = self._requires_oauth_auth(operation_security)
                 elif self.global_security:
                     # Fall back to global security if no operation-level security is defined
                     endpoint.security_requirements = self.global_security
                     endpoint.requires_bearer_auth = self._requires_bearer_auth(self.global_security)
+                    endpoint.requires_oauth_auth = self._requires_oauth_auth(self.global_security)
                 
                 # Extract request body schema if present
                 request_body = operation.get('requestBody', {})
@@ -390,6 +462,15 @@ class OpenAPIParser:
         """
         return [endpoint for endpoint in self.endpoints.values() if endpoint.requires_bearer_auth]
     
+    def get_endpoints_requiring_oauth_auth(self) -> List[Endpoint]:
+        """
+        Get a list of all endpoints that require OAuth 2.0 authentication with auth code flow.
+        
+        Returns:
+            List of Endpoint objects that require OAuth 2.0 authentication
+        """
+        return [endpoint for endpoint in self.endpoints.values() if endpoint.requires_oauth_auth]
+    
     def get_endpoint_by_operation_id(self, operation_id: str) -> Optional[Endpoint]:
         """
         Find an endpoint by its operationId.
@@ -482,6 +563,18 @@ class OpenAPIParser:
             endpoints_dicts.append(endpoint_dict)
             
         return json.dumps(endpoints_dicts, indent=2)
+
+    def get_oauth_auth_code_schemes(self) -> Dict[str, Dict[str, Any]]:
+        """
+        Get all OAuth 2.0 security schemes with authorization code flow.
+        
+        Returns:
+            Dictionary of scheme names to their definitions
+        """
+        return {
+            name: scheme for name, scheme in self.security_schemes.items()
+            if self._is_oauth_auth_code_scheme(name)
+        }
 
 
 # Example usage

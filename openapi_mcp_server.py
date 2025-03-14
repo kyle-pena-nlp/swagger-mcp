@@ -43,7 +43,9 @@ class OpenAPIMCPServer:
         instructions: Optional[str] = None,
         additional_headers: Optional[Dict[str, str]] = None,
         path_filter: Optional[str] = None,
-        exclude_pattern: Optional[str] = None
+        exclude_pattern: Optional[str] = None,
+        client_id: Optional[str] = None,
+        client_secret: Optional[str] = None
     ):
         """
         Initialize the OpenAPI MCP Server.
@@ -58,6 +60,8 @@ class OpenAPIMCPServer:
             additional_headers: Optional dictionary of additional headers to include in all requests
             path_filter: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
             exclude_pattern: Optional regex pattern to exclude endpoints by path (e.g., "/internal/.*")
+            client_id: Optional OAuth client ID for authentication
+            client_secret: Optional OAuth client secret for authentication
         """
         self.server_name = server_name
         self.server_version = server_version or "1.0.0"  # Ensure server_version is not None
@@ -66,6 +70,8 @@ class OpenAPIMCPServer:
         self.additional_headers = additional_headers or {}
         self.path_filter = path_filter
         self.exclude_pattern = exclude_pattern
+        self.client_id = client_id
+        self.client_secret = client_secret
         
         # Create the MCP server
         self.server = Server(
@@ -185,6 +191,35 @@ class OpenAPIMCPServer:
                 
                 # Create an endpoint invoker
                 invoker = EndpointInvoker(endpoint)
+
+                # Prepare OAuth credentials if available
+                oauth_credentials = None
+                if self.client_id and self.client_secret and endpoint.requires_oauth_auth:
+                    # Get OAuth URLs from security schemes
+                    auth_url = None
+                    token_url = None
+                    scopes = None
+                    
+                    # Find the OAuth scheme for this endpoint
+                    if hasattr(self.openapi_parser, 'security_schemes'):
+                        for scheme_name, scheme in self.openapi_parser.security_schemes.items():
+                            if self.openapi_parser._is_oauth_auth_code_scheme(scheme):
+                                # Extract URLs and scopes
+                                from oauth_handler import OAuthHandler
+                                oauth_handler = OAuthHandler()
+                                auth_url, token_url, scopes = oauth_handler.extract_oauth_urls_from_scheme(scheme)
+                                break
+                    
+                    if auth_url and token_url:
+                        oauth_credentials = {
+                            'client_id': self.client_id,
+                            'client_secret': self.client_secret,
+                            'auth_url': auth_url,
+                            'token_url': token_url,
+                            'scope': ' '.join(scopes) if scopes else None,
+                            'service_name': self.server_name
+                        }
+                        logger.info(f"Using OAuth credentials for authentication with authorization URL: {auth_url}")
                 
                 # Invoke the endpoint with the provided parameters
                 logger.info(f"Sending request to: {self.server_url or '[default server]'}")
@@ -192,7 +227,8 @@ class OpenAPIMCPServer:
                     params=arguments,
                     server_url=self.server_url,
                     bearer_token=self.bearer_token,
-                    headers=self.additional_headers
+                    headers=self.additional_headers,
+                    oauth_credentials=oauth_credentials
                 )
                 
                 logger.info(f"Response status code: {response.status_code}")
@@ -242,7 +278,9 @@ def run_server(
     bearer_token: Optional[str] = None,
     additional_headers: Optional[Dict[str, str]] = None,
     path_filter: Optional[str] = None,
-    exclude_pattern: Optional[str] = None
+    exclude_pattern: Optional[str] = None,
+    client_id: Optional[str] = None,
+    client_secret: Optional[str] = None
 ):
     """
     Run an OpenAPI MCP Server with the given parameters.
@@ -255,6 +293,8 @@ def run_server(
         additional_headers: Optional dictionary of additional headers to include in all requests
         path_filter: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
         exclude_pattern: Optional regex pattern to exclude endpoints by path (e.g., "/internal/.*")
+        client_id: Optional OAuth client ID for authentication
+        client_secret: Optional OAuth client secret for authentication
     """
     logger.info(f"Starting OpenAPI MCP Server: {server_name}")
     logger.info(f"OpenAPI spec: {openapi_spec}")
@@ -265,6 +305,10 @@ def run_server(
         logger.info(f"Exclude pattern: {exclude_pattern}")
     if additional_headers:
         logger.info(f"Additional headers: {json.dumps(additional_headers)}")
+    if client_id:
+        logger.info(f"OAuth client ID provided")
+    if client_secret:
+        logger.info(f"OAuth client secret provided")
     
     server = OpenAPIMCPServer(
         server_name=server_name,
@@ -273,7 +317,9 @@ def run_server(
         bearer_token=bearer_token,
         additional_headers=additional_headers,
         path_filter=path_filter,
-        exclude_pattern=exclude_pattern
+        exclude_pattern=exclude_pattern,
+        client_id=client_id,
+        client_secret=client_secret
     )
     
     logger.info("Server initialized, starting main loop")
@@ -292,6 +338,8 @@ if __name__ == "__main__":
     parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
     parser.add_argument("--path-filter", help="Filter endpoints by path pattern (e.g., '/admin/.*' or '/api/v1')")
     parser.add_argument("--exclude-pattern", help="Exclude endpoints by path pattern (e.g., '/internal/.*')")
+    parser.add_argument("--client-id", help="OAuth client ID for authentication")
+    parser.add_argument("--client-secret", help="OAuth client secret for authentication")
     
     args = parser.parse_args()
     
@@ -312,5 +360,7 @@ if __name__ == "__main__":
         bearer_token=args.token,
         additional_headers=additional_headers if additional_headers else None,
         path_filter=args.path_filter,
-        exclude_pattern=args.exclude_pattern
+        exclude_pattern=args.exclude_pattern,
+        client_id=args.client_id,
+        client_secret=args.client_secret
     ) 

@@ -21,6 +21,7 @@ class Endpoint:
     
     # Authentication and security
     requires_bearer_auth: bool = False
+    requires_oauth_auth: bool = False
     security_requirements: List[Dict[str, List[str]]] = field(default_factory=list)
     
     # Request information

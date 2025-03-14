@@ -4,6 +4,7 @@ import logging
 from typing import Dict, List, Any, Optional, Union
 from endpoint import Endpoint
 from simple_endpoint import SimpleEndpoint, create_simple_endpoint
+from oauth_handler import OAuthHandler
 
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
@@ -76,15 +77,22 @@ class MissingRequiredParameterError(EndpointInvocationError):
         super().__init__(f"Missing required parameter: {param_name}")
 
 
+class MissingOAuthCredentialsError(EndpointInvocationError):
+    """Exception raised when OAuth authentication is required but credentials are not provided."""
+    def __init__(self):
+        super().__init__("OAuth credentials are required but were not provided")
+
+
 class EndpointInvoker:
     """Class for programmatically invoking API endpoints described by Endpoint objects."""
     
-    def __init__(self, endpoint: Union[Endpoint, SimpleEndpoint]):
+    def __init__(self, endpoint: Union[Endpoint, SimpleEndpoint], oauth_handler: Optional[OAuthHandler] = None):
         """
         Initialize the invoker with an endpoint.
         
         Args:
             endpoint: The Endpoint or SimpleEndpoint object describing the API endpoint to invoke
+            oauth_handler: Optional OAuthHandler for handling OAuth 2.0 authentication
         """
         if isinstance(endpoint, Endpoint):
             self.endpoint = endpoint
@@ -93,6 +101,8 @@ class EndpointInvoker:
             self.simple_endpoint = endpoint
             # We don't need the original endpoint if we're provided with a SimpleEndpoint
             self.endpoint = None
+            
+        self.oauth_handler = oauth_handler or OAuthHandler()
     
     def to_simple_endpoint(self) -> SimpleEndpoint:
         """
@@ -115,7 +125,8 @@ class EndpointInvoker:
                           server_url: Optional[str] = None,
                           headers: Optional[Dict[str, str]] = None,
                           bearer_token: Optional[str] = None,
-                          timeout: Optional[float] = None) -> requests.Response:
+                          timeout: Optional[float] = None,
+                          oauth_credentials: Optional[Dict[str, Any]] = None) -> requests.Response:
         """
         Invoke the endpoint with a single parameter object that contains path parameters,
         query parameters, and request body properties combined.
@@ -126,6 +137,8 @@ class EndpointInvoker:
             headers: HTTP headers to include in the request
             bearer_token: Bearer token for authentication
             timeout: Request timeout in seconds
+            oauth_credentials: OAuth credentials for authentication
+                (client_id, client_secret, auth_url, token_url, redirect_uri, scope)
             
         Returns:
             Response object from the requests library
@@ -164,7 +177,8 @@ class EndpointInvoker:
             request_body=request_body,
             bearer_token=bearer_token,
             timeout=timeout,
-            simple_endpoint=simple_endpoint
+            simple_endpoint=simple_endpoint,
+            oauth_credentials=oauth_credentials
         )
         
     def invoke(self, 
@@ -175,7 +189,8 @@ class EndpointInvoker:
                headers: Optional[Dict[str, str]] = None,
                request_body: Optional[Any] = None,
                bearer_token: Optional[str] = None,
-               timeout: Optional[float] = None) -> requests.Response:
+               timeout: Optional[float] = None,
+               oauth_credentials: Optional[Dict[str, Any]] = None) -> requests.Response:
         """
         Invoke the endpoint with the provided parameters.
         
@@ -188,6 +203,8 @@ class EndpointInvoker:
             request_body: Body of the request (for POST, PUT, PATCH)
             bearer_token: Bearer token for authentication
             timeout: Request timeout in seconds
+            oauth_credentials: OAuth credentials for authentication
+                (client_id, client_secret, auth_url, token_url, redirect_uri, scope)
             
         Returns:
             Response object from the requests library
@@ -208,7 +225,8 @@ class EndpointInvoker:
             request_body=request_body,
             bearer_token=bearer_token,
             timeout=timeout,
-            simple_endpoint=None
+            simple_endpoint=None,
+            oauth_credentials=oauth_credentials
         )
     
     def _invoke_internal(self,
@@ -220,7 +238,8 @@ class EndpointInvoker:
                         request_body: Optional[Any] = None,
                         bearer_token: Optional[str] = None,
                         timeout: Optional[float] = None,
-                        simple_endpoint: Optional[SimpleEndpoint] = None) -> requests.Response:
+                        simple_endpoint: Optional[SimpleEndpoint] = None,
+                        oauth_credentials: Optional[Dict[str, Any]] = None) -> requests.Response:
         """
         Internal method to invoke the endpoint with the provided parameters.
         
@@ -234,6 +253,7 @@ class EndpointInvoker:
             bearer_token: Bearer token for authentication
             timeout: Request timeout in seconds
             simple_endpoint: Optional SimpleEndpoint to use instead of self.endpoint
+            oauth_credentials: OAuth credentials for authentication
             
         Returns:
             Response object from the requests library
@@ -246,7 +266,7 @@ class EndpointInvoker:
         
         # Validate and prepare all request components
         url = self._build_url(server_url, path_params, endpoint_to_use)
-        headers = self._prepare_headers(headers, bearer_token, endpoint_to_use)
+        headers = self._prepare_headers(headers, bearer_token, endpoint_to_use, oauth_credentials)
         query_params = self._validate_query_params(query_params, endpoint_to_use)
         form_params = self._validate_form_params(form_params, endpoint_to_use)
         request_body = self._validate_request_body(request_body, endpoint_to_use)
@@ -362,7 +382,8 @@ Request details:
     def _prepare_headers(self, 
                         headers: Optional[Dict[str, str]], 
                         bearer_token: Optional[str],
-                        endpoint_to_use: Union[Endpoint, SimpleEndpoint]) -> Dict[str, str]:
+                        endpoint_to_use: Union[Endpoint, SimpleEndpoint],
+                        oauth_credentials: Optional[Dict[str, Any]] = None) -> Dict[str, str]:
         """
         Prepare the headers for the request, including authentication.
         
@@ -370,21 +391,40 @@ Request details:
             headers: HTTP headers to include in the request
             bearer_token: Bearer token for authentication
             endpoint_to_use: The endpoint to use for header preparation
+            oauth_credentials: OAuth credentials for authentication
             
         Returns:
             Dictionary of headers to include in the request
             
         Raises:
             MissingBearerTokenError: If bearer token authentication is required but not provided
+            MissingOAuthCredentialsError: If OAuth authentication is required but credentials not provided
             MissingHeaderParameterError: If a required header parameter is missing
         """
         prepared_headers = headers.copy() if headers else {}
         
         # Check if bearer token is required
         if endpoint_to_use.requires_bearer_auth:
-            if not bearer_token:
-                raise MissingBearerTokenError()
-            prepared_headers['Authorization'] = f"Bearer {bearer_token}"
+            if bearer_token:
+                prepared_headers['Authorization'] = f"Bearer {bearer_token}"
+            else:
+                # Check if we can use OAuth if bearer token is not provided
+                if endpoint_to_use.requires_oauth_auth and oauth_credentials:
+                    # Get OAuth token and use it as a bearer token
+                    access_token = self._get_oauth_token(oauth_credentials)
+                    prepared_headers['Authorization'] = f"Bearer {access_token}"
+                else:
+                    raise MissingBearerTokenError()
+        
+        # Check if OAuth is required but bearer token not already provided
+        elif endpoint_to_use.requires_oauth_auth:
+            if 'Authorization' not in prepared_headers:
+                if not oauth_credentials:
+                    raise MissingOAuthCredentialsError()
+                
+                # Get OAuth token and use it as a bearer token
+                access_token = self._get_oauth_token(oauth_credentials)
+                prepared_headers['Authorization'] = f"Bearer {access_token}"
         
         # Check required header parameters - different for SimpleEndpoint vs Endpoint
         if isinstance(endpoint_to_use, SimpleEndpoint):
@@ -501,4 +541,43 @@ Request details:
         if requires_body and request_body is None:
             raise MissingRequestBodyError()
         
-        return request_body 
+        return request_body
+    
+    def _get_oauth_token(self, oauth_credentials: Dict[str, Any]) -> str:
+        """
+        Get an OAuth 2.0 access token using the provided credentials.
+        
+        Args:
+            oauth_credentials: Dictionary containing OAuth credentials
+                (client_id, client_secret, auth_url, token_url, redirect_uri, scope)
+                
+        Returns:
+            OAuth access token
+            
+        Raises:
+            MissingOAuthCredentialsError: If required OAuth credentials are missing
+        """
+        required_fields = ['client_id', 'client_secret', 'auth_url', 'token_url']
+        for field in required_fields:
+            if field not in oauth_credentials:
+                raise MissingOAuthCredentialsError()
+        
+        # Extract credentials
+        client_id = oauth_credentials['client_id']
+        client_secret = oauth_credentials['client_secret']
+        auth_url = oauth_credentials['auth_url']
+        token_url = oauth_credentials['token_url']
+        redirect_uri = oauth_credentials.get('redirect_uri', "http://localhost:8000/callback")
+        scope = oauth_credentials.get('scope')
+        service_name = oauth_credentials.get('service_name')
+        
+        # Get access token
+        return self.oauth_handler.get_access_token(
+            client_id=client_id,
+            client_secret=client_secret,
+            auth_url=auth_url,
+            token_url=token_url,
+            redirect_uri=redirect_uri,
+            scope=scope,
+            service_name=service_name
+        ) 
