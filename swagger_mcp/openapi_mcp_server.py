@@ -3,6 +3,10 @@ import requests
 import os
 import yaml
 import logging
+import argparse
+import asyncio
+import re
+import traceback
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from typing import Dict, List, Optional, Any, Union, Callable, Awaitable, Iterator
@@ -122,7 +126,6 @@ class OpenAPIMCPServer:
                 
                 # Apply path filter and exclude pattern if specified
                 if self.path_filter or self.exclude_pattern:
-                    import re
                     
                     # Check exclude pattern first - if path matches exclude pattern, skip this endpoint
                     if self.exclude_pattern and re.search(self.exclude_pattern, endpoint.path):
@@ -210,7 +213,6 @@ class OpenAPIMCPServer:
                     
             except Exception as e:
                 logger.error(f"Error calling tool {name}: {e}")
-                import traceback
                 error_trace = traceback.format_exc()
                 logger.error(f"Traceback: {error_trace}")
                 return [TextContent(type="text", text=f"Error calling tool {name}: {str(e)}\n{error_trace}")]
@@ -283,8 +285,7 @@ def run_server(
 def main():
     try:
         # Simple CLI to start the server
-        import argparse
-        import asyncio
+
         
         parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI spec")
         parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", nargs="?")
