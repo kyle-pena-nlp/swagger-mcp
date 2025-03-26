@@ -306,9 +306,20 @@ class OpenAPIParser:
                         param_name = param.get('name', '')
                         param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
                         
-                        # Add description from parameter to schema if present
-                        if 'description' in param:
-                            param_schema['description'] = param.get('description')
+                        # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
+                        if not param_schema and 'type' in param:
+                            param_schema = {
+                                'type': param.get('type'),
+                                'description': param.get('description', '')
+                            }
+                            # Copy over other schema-related fields
+                            for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
+                                if field in param:
+                                    param_schema[field] = param[field]
+                        else:
+                            # Add description from parameter to schema if present
+                            if 'description' in param:
+                                param_schema['description'] = param.get('description')
                         
                         query_schema['properties'][param_name] = param_schema
                         
@@ -333,9 +344,20 @@ class OpenAPIParser:
                         param_name = param.get('name', '')
                         param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
                         
-                        # Add description from parameter to schema if present
-                        if 'description' in param:
-                            param_schema['description'] = param.get('description')
+                        # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
+                        if not param_schema and 'type' in param:
+                            param_schema = {
+                                'type': param.get('type'),
+                                'description': param.get('description', '')
+                            }
+                            # Copy over other schema-related fields
+                            for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
+                                if field in param:
+                                    param_schema[field] = param[field]
+                        else:
+                            # Add description from parameter to schema if present
+                            if 'description' in param:
+                                param_schema['description'] = param.get('description')
                         
                         path_schema['properties'][param_name] = param_schema
                         
@@ -388,19 +410,20 @@ class OpenAPIParser:
                         param_name = param.get('name', '')
                         param_schema = param.get('schema', {}).copy() or {}  # Make a copy to avoid modifying original
                         
-                        # Some OpenAPI 2.0 specs use 'type' directly instead of 'schema'
+                        # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
                         if not param_schema and 'type' in param:
-                            param_schema = {'type': param.get('type')}
-                            if 'format' in param:
-                                param_schema['format'] = param.get('format')
-                            if 'enum' in param:
-                                param_schema['enum'] = param.get('enum')
-                            if 'default' in param:
-                                param_schema['default'] = param.get('default')
-                        
-                        # Add description from parameter to schema if present
-                        if 'description' in param:
-                            param_schema['description'] = param.get('description')
+                            param_schema = {
+                                'type': param.get('type'),
+                                'description': param.get('description', '')
+                            }
+                            # Copy over other schema-related fields
+                            for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
+                                if field in param:
+                                    param_schema[field] = param[field]
+                        else:
+                            # Add description from parameter to schema if present
+                            if 'description' in param:
+                                param_schema['description'] = param.get('description')
                         
                         form_schema['properties'][param_name] = param_schema
                         

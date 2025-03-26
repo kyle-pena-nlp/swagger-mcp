@@ -14,6 +14,7 @@ from mcp.server.models import InitializationOptions
 from swagger_mcp.openapi_parser import OpenAPIParser
 from swagger_mcp.endpoint import Endpoint
 from swagger_mcp.simple_endpoint import SimpleEndpoint, create_simple_endpoint
+from swagger_mcp.endpoint_invoker import EndpointInvoker
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, 

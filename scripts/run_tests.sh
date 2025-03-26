@@ -36,5 +36,8 @@ python -m pytest swagger_mcp/tests/test_query_parameter_variables.py -v
 echo "9. Running test_mixed_endpoint_variables.py..."
 python -m pytest swagger_mcp/tests/test_mixed_endpoint_variables.py -v
 
+echo "10. Running test_url_usage.py..."
+python -m pytest swagger_mcp/tests/test_url_usage.py -v
+
 # If we get here, all tests passed
 echo "✅ All tests passed!"

@@ -465,7 +465,16 @@ Request details:
         # Get required query parameters from the endpoint
         required_params = set()
         if hasattr(endpoint_to_use, 'get_required_parameters'):
-            required_params = endpoint_to_use.get_required_parameters().get('query', set())
+            required_params_result = endpoint_to_use.get_required_parameters()
+            if isinstance(required_params_result, dict):
+                # Handle Endpoint case where result is Dict[str, Set[str]]
+                required_params = required_params_result.get('query', set())
+            else:
+                # Handle SimpleEndpoint case where result is Set[str]
+                # Only include parameters that are marked as query parameters in the mapping
+                required_params = {param for param in required_params_result 
+                                if hasattr(endpoint_to_use, 'parameter_type_mapping') and 
+                                endpoint_to_use.parameter_type_mapping.get(param) == 'query'}
         
         # Check that all required parameters are present
         for param_name in required_params:
