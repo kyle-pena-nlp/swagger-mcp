@@ -19,12 +19,9 @@ from swagger_mcp.openapi_parser import OpenAPIParser
 from swagger_mcp.endpoint import Endpoint
 from swagger_mcp.simple_endpoint import SimpleEndpoint, create_simple_endpoint
 from swagger_mcp.endpoint_invoker import EndpointInvoker
+from swagger_mcp.logging import setup_logger
 
-# Configure logging
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                   handlers=[logging.StreamHandler()])
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 class OpenAPIMCPServer:
     """
@@ -306,7 +303,7 @@ def main():
                     key, value = header.split(':', 1)
                     additional_headers[key.strip()] = value.strip()
                 except ValueError:
-                    print(f"Warning: Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
+                    logger.warning(f"Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
         
         run_server(
             openapi_spec=args.spec,
@@ -323,5 +320,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-    

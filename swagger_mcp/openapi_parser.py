@@ -5,7 +5,9 @@ import yaml
 
 from typing import Dict, List, Any, Optional, Union
 from swagger_mcp.endpoint import Endpoint
+from swagger_mcp.logging import setup_logger
 
+logger = setup_logger(__name__)
 
 class OpenAPIParser:
     """
@@ -684,31 +686,23 @@ class OpenAPIParser:
 # Example usage
 if __name__ == "__main__":
     # Example with a dictionary
-    example_spec = {
+    spec = {
         "openapi": "3.0.0",
-        "info": {
-            "title": "Example API",
-            "version": "1.0.0"
-        },
+        "info": {"title": "Test API", "version": "1.0.0"},
         "paths": {
-            "/users": {
-                "get": {
-                    "operationId": "getUsers",
-                    "summary": "Get all users"
-                },
+            "/test": {
                 "post": {
-                    "operationId": "createUser",
-                    "summary": "Create a new user",
+                    "operationId": "testEndpoint",
                     "requestBody": {
+                        "required": True,
                         "content": {
                             "application/json": {
                                 "schema": {
                                     "type": "object",
                                     "properties": {
                                         "name": {"type": "string"},
-                                        "email": {"type": "string", "format": "email"}
-                                    },
-                                    "required": ["name", "email"]
+                                        "age": {"type": "integer"}
+                                    }
                                 }
                             }
                         }
@@ -718,10 +712,11 @@ if __name__ == "__main__":
         }
     }
     
-    parser = OpenAPIParser(example_spec)
-    print("All endpoints:")
-    print(parser.to_json())
+    parser = OpenAPIParser(spec)
+    logger.info("All endpoints:")
+    logger.info(parser.to_json())
     
-    print("\nEndpoints with request bodies:")
-    for endpoint in parser.get_endpoints_with_request_body():
-        print(f"{endpoint['method']} {endpoint['path']}: {endpoint['request_body_schema']}") 
+    logger.info("Endpoints with request bodies:")
+    for endpoint in parser.endpoints.values():
+        if endpoint.request_body_schema:
+            logger.info(f"{endpoint.method} {endpoint.path}: {endpoint.request_body_schema}")

@@ -4,18 +4,9 @@ import logging
 from typing import Dict, List, Any, Optional, Union
 from swagger_mcp.endpoint import Endpoint
 from swagger_mcp.simple_endpoint import SimpleEndpoint, create_simple_endpoint
+from swagger_mcp.logging import setup_logger
 
-logging.basicConfig(level=logging.INFO, 
-                   format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                   handlers=[
-                       logging.StreamHandler(),  # Console handler
-                       RotatingFileHandler(
-                           'openapi_mcp_server.log',
-                           maxBytes=10485760,  # 10MB
-                           backupCount=5
-                       )
-                   ])
-logger = logging.getLogger(__name__)
+logger = setup_logger(__name__)
 
 
 class EndpointInvocationError(Exception):
