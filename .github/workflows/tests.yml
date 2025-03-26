@@ -30,23 +30,6 @@ jobs:
       run: |
         pytest swagger_mcp/tests/unit/ -v
         
-    - name: Start API server
-      run: |
-        # Start the server in the background
-        python sample_rest_api/run.py &
-        # Save the PID
-        echo $! > server.pid
-        # Wait for server to be ready
-        sleep 5
-        
     - name: Run integration tests
       run: |
         pytest swagger_mcp/tests/integration/ -v --capture=no --log-cli-level=INFO
-        
-    - name: Stop API server
-      if: always()  # Run this step even if tests fail
-      run: |
-        if [ -f server.pid ]; then
-          kill $(cat server.pid) || true
-          rm server.pid
-        fi
