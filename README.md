@@ -1,5 +1,8 @@
 # OpenAPI Parser
 
+[![Tests](https://github.com/codeium/swagger-mcp/actions/workflows/tests.yml/badge.svg)](https://github.com/codeium/swagger-mcp/actions/workflows/tests.yml)
+[![codecov](https://codecov.io/gh/codeium/swagger-mcp/branch/main/graph/badge.svg)](https://codecov.io/gh/codeium/swagger-mcp)
+
 A Python utility for parsing OpenAPI specifications and extracting endpoint information, including HTTP methods and JSON request body schemas.
 
 ## Features
@@ -143,7 +146,6 @@ if get_user_endpoint:
 
 # Convert to JSON
 json_string = parser.to_json()
-```
 
 ## Endpoint Dataclass
 
@@ -260,7 +262,32 @@ if endpoint:
         print(data)
     else:
         print(f"Error: {response.status_code}")
+
+## Development
+
+### Running Tests
+
+The project includes both unit tests and integration tests. To run the tests:
+
+```bash
+# Install development dependencies
+pip install -r requirements-dev.txt
+
+# Run unit tests with coverage
+pytest swagger_mcp/tests/unit/ -v --cov=swagger_mcp
+
+# Run integration tests
+bash scripts/run_integration_tests.sh
 ```
+
+### CI/CD
+
+This project uses GitHub Actions for continuous integration:
+
+- Tests are run on every push to main and pull request
+- Both unit tests and integration tests are executed
+- Code coverage reports are generated and uploaded to Codecov
+- Python 3.10 is used for testing
 
 ## Running Tests
 
