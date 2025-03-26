@@ -28,7 +28,7 @@ jobs:
         
     - name: Run unit tests
       run: |
-        pytest swagger_mcp/tests/unit/ -v --cov=swagger_mcp --cov-report=xml
+        pytest swagger_mcp/tests/unit/ -v
         
     - name: Run integration tests
       run: |
