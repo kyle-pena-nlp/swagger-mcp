@@ -36,7 +36,10 @@ detailed_spec = {
                         "name": "sort_by",
                         "in": "query",
                         "description": "Field to sort results by (name, email, created_at, updated_at)",
-                        "schema": {"type": "string", "enum": ["name", "email", "created_at", "updated_at"]}
+                        "schema": {
+                            "type": "string",
+                            "enum": ["name", "email", "created_at", "updated_at"]
+                        }
                     }
                 ],
                 "responses": {
@@ -48,9 +51,8 @@ detailed_spec = {
             "post": {
                 "operationId": "createUser",
                 "summary": "Create a new user",
-                "description": "Creates a new user in the system with the provided information. Requires admin privileges.",
+                "description": "Creates a new user in the system with the provided information.",
                 "requestBody": {
-                    "description": "User information",
                     "required": True,
                     "content": {
                         "application/json": {
@@ -65,12 +67,7 @@ detailed_spec = {
                                     "email": {
                                         "type": "string",
                                         "format": "email",
-                                        "description": "Email address of the user (must be unique)"
-                                    },
-                                    "role": {
-                                        "type": "string",
-                                        "enum": ["user", "admin"],
-                                        "description": "Role of the user in the system"
+                                        "description": "Email address of the user"
                                     }
                                 }
                             }
@@ -80,6 +77,48 @@ detailed_spec = {
                 "responses": {
                     "201": {
                         "description": "User successfully created"
+                    }
+                }
+            }
+        },
+        "/users/{userId}/profile": {
+            "put": {
+                "operationId": "updateUserProfile",
+                "summary": "Update user profile",
+                "description": "Updates a user's profile information using multipart form data.",
+                "parameters": [
+                    {
+                        "name": "userId",
+                        "in": "path",
+                        "required": True,
+                        "description": "ID of the user to update",
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "properties": {
+                                    "displayName": {
+                                        "type": "string",
+                                        "description": "Display name shown in the UI"
+                                    },
+                                    "bio": {
+                                        "type": "string",
+                                        "description": "User's biographical information"
+                                    },
+                                    "location": {
+                                        "type": "string",
+                                        "description": "User's geographical location"
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -100,57 +139,76 @@ async def test_parameter_descriptions():
             server_name="test-server",
             openapi_spec=temp_file_path
         )
-        
+
         # Get the list_tools handler from _register_handlers
         handlers = server._register_handlers()
         list_tools = handlers["list_tools"]
-        
+
         # Call list_tools to get the available tools
         tools = await list_tools()
-        
+
         # Print the tool schemas for debugging
         for tool in tools:
             print(f"\nTool: {tool.name}")
             print(json.dumps(tool.inputSchema, indent=2))
-        
+
         # Verify we have the expected number of tools
-        assert len(tools) == 2, f"Expected 2 tools, got {len(tools)}"
-        
+        assert len(tools) == 3, f"Expected 3 tools, got {len(tools)}"
+
         # Find the listUsers tool
         list_users_tool = next((tool for tool in tools if tool.name == "listUsers"), None)
         assert list_users_tool is not None, "listUsers tool not found"
-        
+
         # Verify the listUsers tool has the correct parameter descriptions
         properties = list_users_tool.inputSchema["properties"]
         assert "limit" in properties, "limit parameter not found"
         assert properties["limit"]["description"] == "Maximum number of results to return per page (1-100)"
         assert properties["limit"]["type"] == "integer"
-        
+
         assert "offset" in properties, "offset parameter not found"
         assert properties["offset"]["description"] == "Number of results to skip for pagination"
         assert properties["offset"]["type"] == "integer"
-        
+
         assert "sort_by" in properties, "sort_by parameter not found"
         assert properties["sort_by"]["description"] == "Field to sort results by (name, email, created_at, updated_at)"
         assert properties["sort_by"]["type"] == "string"
-        
+
         # Find the createUser tool
         create_user_tool = next((tool for tool in tools if tool.name == "createUser"), None)
         assert create_user_tool is not None, "createUser tool not found"
-        
+
         # Verify the createUser tool has the correct request body parameter descriptions
         properties = create_user_tool.inputSchema["properties"]
         assert "name" in properties, "name parameter not found"
         assert properties["name"]["description"] == "Full name of the user"
         assert properties["name"]["type"] == "string"
-        
+
         assert "email" in properties, "email parameter not found"
-        assert properties["email"]["description"] == "Email address of the user (must be unique)"
+        assert properties["email"]["description"] == "Email address of the user"
         assert properties["email"]["type"] == "string"
-        
-        assert "role" in properties, "role parameter not found"
-        assert properties["role"]["description"] == "Role of the user in the system"
-        assert properties["role"]["type"] == "string"
+
+        # Find the updateUserProfile tool
+        update_profile_tool = next((tool for tool in tools if tool.name == "updateUserProfile"), None)
+        assert update_profile_tool is not None, "updateUserProfile tool not found"
+
+        # Verify the updateUserProfile tool has the correct multipart form data parameter descriptions
+        properties = update_profile_tool.inputSchema["properties"]
+
+        assert "userId" in properties, "userId parameter not found"
+        assert properties["userId"]["description"] == "ID of the user to update"
+        assert properties["userId"]["type"] == "integer"
+
+        assert "displayName" in properties, "displayName parameter not found"
+        assert properties["displayName"]["description"] == "Display name shown in the UI"
+        assert properties["displayName"]["type"] == "string"
+
+        assert "bio" in properties, "bio parameter not found"
+        assert properties["bio"]["description"] == "User's biographical information"
+        assert properties["bio"]["type"] == "string"
+
+        assert "location" in properties, "location parameter not found"
+        assert properties["location"]["description"] == "User's geographical location"
+        assert properties["location"]["type"] == "string"
 
     finally:
         # Clean up the temporary file
