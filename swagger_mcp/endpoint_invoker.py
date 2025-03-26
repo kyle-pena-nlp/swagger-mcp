@@ -76,6 +76,12 @@ class MissingRequiredParameterError(EndpointInvocationError):
         super().__init__(f"Missing required parameter: {param_name}")
 
 
+class InvalidRequestBodyError(EndpointInvocationError):
+    """Exception raised when a request body is invalid."""
+    def __init__(self, message: str):
+        super().__init__(f"Invalid request body: {message}")
+
+
 class EndpointInvoker:
     """Class for programmatically invoking API endpoints described by Endpoint objects."""
     
@@ -518,6 +524,7 @@ Request details:
             
         Raises:
             MissingRequestBodyError: If a request body is required but not provided
+            InvalidRequestBodyError: If the request body is invalid
         """
         # Check if a request body is required
         requires_body = False
@@ -527,5 +534,41 @@ Request details:
         # If the body is required but not provided, raise an error
         if requires_body and request_body is None:
             raise MissingRequestBodyError()
+
+        # If there's no request body schema or no request body, we're done
+        if not hasattr(endpoint_to_use, 'request_body_schema') or not endpoint_to_use.request_body_schema or not request_body:
+            return request_body
+
+        # Get the schema from the endpoint
+        schema = endpoint_to_use.request_body_schema
         
-        return request_body 
+        # Check required fields
+        if 'required' in schema and isinstance(schema['required'], list):
+            for field in schema['required']:
+                if field not in request_body:
+                    raise InvalidRequestBodyError(f"Missing required field: {field}")
+
+        # Check field types and constraints
+        if 'properties' in schema and isinstance(schema['properties'], dict):
+            for field, field_schema in schema['properties'].items():
+                if field in request_body:
+                    value = request_body[field]
+                    
+                    # Check type
+                    field_type = field_schema.get('type')
+                    if field_type == 'string' and not isinstance(value, str):
+                        raise InvalidRequestBodyError(f"Field '{field}' must be a string")
+                    elif field_type == 'integer' and not isinstance(value, int):
+                        raise InvalidRequestBodyError(f"Field '{field}' must be an integer")
+                    elif field_type == 'array' and not isinstance(value, list):
+                        raise InvalidRequestBodyError(f"Field '{field}' must be an array")
+                    
+                    # Check enum values
+                    if 'enum' in field_schema and value not in field_schema['enum']:
+                        raise InvalidRequestBodyError(f"Field '{field}' must be one of: {field_schema['enum']}")
+                    
+                    # Check minimum value for integers
+                    if field_type == 'integer' and 'minimum' in field_schema and value < field_schema['minimum']:
+                        raise InvalidRequestBodyError(f"Field '{field}' must be greater than or equal to {field_schema['minimum']}")
+
+        return request_body
