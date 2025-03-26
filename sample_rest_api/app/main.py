@@ -12,23 +12,7 @@ from sample_rest_api.app.database import database, create_tables, categories, pr
 from sample_rest_api.app.seed import seed_data
 from sample_rest_api.app.logger import logger
 
-# Create FastAPI app
-app = FastAPI(
-    title="Product-Category API",
-    description="A simple REST API for managing products and categories",
-    version="1.0.0",
-)
-
-# Add CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# Events for database connection lifecycle
+# Create FastAPI app with lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     # Startup
@@ -50,7 +34,21 @@ async def lifespan(app: FastAPI):
     await database.disconnect()
     logger.info("Application shutdown complete")
 
-app.lifespan_context = lifespan
+app = FastAPI(
+    title="Product-Category API",
+    description="A simple REST API for managing products and categories",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# Add CORS middleware
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Models
 class CategoryBase(BaseModel):
@@ -413,4 +411,4 @@ async def search_products(
 if __name__ == "__main__":
     port = int(os.environ.get("API_PORT", 9000))
     logger.info(f"Starting server on port {port}")
-    uvicorn.run("app.main:app", host="0.0.0.0", port=port, reload=True) 
+    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True) 

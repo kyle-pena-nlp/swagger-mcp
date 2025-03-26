@@ -1,6 +1,7 @@
 import uvicorn
 import argparse
 import os
+from sample_rest_api.app.main import app
 
 def run(port, use_memory_db):
     if not use_memory_db:

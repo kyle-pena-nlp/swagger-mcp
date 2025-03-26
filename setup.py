@@ -38,10 +38,5 @@ setup(
     ],
     python_requires=">=3.10",
     install_requires=install_requires,
-    data_files=[(".", ["requirements.txt"])],
-    entry_points={
-        "console_scripts": [
-            "swagger-mcp=swagger_mcp.openapi_mcp_server:main",
-        ],
-    },
+    data_files=[(".", ["requirements.txt"])]
 )
