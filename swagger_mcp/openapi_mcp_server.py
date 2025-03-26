@@ -280,38 +280,47 @@ def run_server(
     asyncio.run(server.run())
 
 
+def main():
+    try:
+        # Simple CLI to start the server
+        import argparse
+        import asyncio
+        
+        parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI spec")
+        parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", nargs="?")
+        parser.add_argument("--name", help="Server name")
+        parser.add_argument("--url", help="Base URL for API calls (overrides servers in spec)")
+        parser.add_argument("--token", help="Bearer token for authenticated requests")
+        parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
+        parser.add_argument("--path-filter", help="Filter endpoints by path pattern (e.g., '/admin/.*' or '/api/v1')")
+        parser.add_argument("--exclude-pattern", help="Exclude endpoints by path pattern (e.g., '/internal/.*')")
+        
+        args = parser.parse_args()
+        
+        # Process headers into a dictionary if provided
+        additional_headers = {}
+        if args.headers:
+            for header in args.headers:
+                try:
+                    key, value = header.split(':', 1)
+                    additional_headers[key.strip()] = value.strip()
+                except ValueError:
+                    print(f"Warning: Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
+        
+        run_server(
+            openapi_spec=args.spec,
+            server_name=args.name,
+            server_url=args.url,
+            bearer_token=args.token,
+            additional_headers=additional_headers if additional_headers else None,
+            path_filter=args.path_filter,
+            exclude_pattern=args.exclude_pattern
+            ) 
+    except Exception as e:
+        logger.error(f"Server failed to start: {str(e)}", exc_info=True)
+        raise
+
 if __name__ == "__main__":
-    # Simple CLI to start the server
-    import argparse
-    import asyncio
+    main()
+
     
-    parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI spec")
-    parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", nargs="?")
-    parser.add_argument("--name", help="Server name")
-    parser.add_argument("--url", help="Base URL for API calls (overrides servers in spec)")
-    parser.add_argument("--token", help="Bearer token for authenticated requests")
-    parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
-    parser.add_argument("--path-filter", help="Filter endpoints by path pattern (e.g., '/admin/.*' or '/api/v1')")
-    parser.add_argument("--exclude-pattern", help="Exclude endpoints by path pattern (e.g., '/internal/.*')")
-    
-    args = parser.parse_args()
-    
-    # Process headers into a dictionary if provided
-    additional_headers = {}
-    if args.headers:
-        for header in args.headers:
-            try:
-                key, value = header.split(':', 1)
-                additional_headers[key.strip()] = value.strip()
-            except ValueError:
-                print(f"Warning: Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
-    
-    run_server(
-        openapi_spec=args.spec,
-        server_name=args.name,
-        server_url=args.url,
-        bearer_token=args.token,
-        additional_headers=additional_headers if additional_headers else None,
-        path_filter=args.path_filter,
-        exclude_pattern=args.exclude_pattern
-    ) 
