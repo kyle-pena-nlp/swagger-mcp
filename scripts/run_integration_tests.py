@@ -5,15 +5,58 @@ import sys
 import os
 import signal
 import argparse
+import venv
 from pathlib import Path
+
+def ensure_venv(api_dir):
+    """Ensure the virtual environment exists and requirements are installed."""
+    venv_dir = api_dir / ".venv"
+    requirements_file = api_dir / "requirements.txt"
+    
+    # Create venv if it doesn't exist
+    if not venv_dir.exists():
+        print("Creating virtual environment for sample REST API...")
+        venv.create(venv_dir, with_pip=True)
+    
+    # Determine pip path
+    if sys.platform == "win32":
+        pip_path = venv_dir / "Scripts" / "pip"
+    else:
+        pip_path = venv_dir / "bin" / "pip"
+    
+    # Install requirements
+    if requirements_file.exists():
+        print("Installing sample REST API requirements...")
+        subprocess.run(
+            [str(pip_path), "install", "-r", str(requirements_file)],
+            check=True,
+            cwd=str(api_dir)
+        )
+
+def get_python_path(api_dir):
+    """Get the Python interpreter path from the virtual environment."""
+    if sys.platform == "win32":
+        python_path = api_dir / ".venv" / "Scripts" / "python"
+    else:
+        python_path = api_dir / ".venv" / "bin" / "python"
+    return python_path
 
 def start_sample_api():
     """Start the sample REST API server."""
+    project_root = Path(__file__).parent.parent
+    api_dir = project_root / "sample-rest-api"
+    
+    # Ensure virtual environment is set up
+    ensure_venv(api_dir)
+    
+    # Get the Python interpreter from the virtual environment
+    python_path = get_python_path(api_dir)
+    
     api_process = subprocess.Popen(
-        ["python", "sample-rest-api/app.py"],
+        [str(python_path), "app.py"],
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        cwd=str(Path(__file__).parent.parent)
+        cwd=str(api_dir)
     )
     
     # Wait for the server to start
