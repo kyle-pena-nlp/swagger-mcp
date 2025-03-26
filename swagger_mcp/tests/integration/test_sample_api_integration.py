@@ -117,3 +117,18 @@ async def test_product_search_with_mixed_parameters(mcp_client: OpenAPIMCPServer
             "sort_by": "price",
             "sort_order": "asc"
         })
+
+@pytest.mark.asyncio
+async def test_create_category_categories__post_has_required_fields(mcp_client: OpenAPIMCPServer):
+    """Test that the create_category endpoint has required fields"""
+    handlers = mcp_client._register_handlers()
+    list_tools = handlers["list_tools"]
+    
+    # Test create_category
+    tools = await list_tools()
+    create_category_tool = next(tool for tool in tools if tool.name == "create_category_categories__post")
+    
+    # Check that the category has the required fields
+    print(create_category_tool)
+    assert create_category_tool.name == "create_category_categories__post"
+    assert set(create_category_tool.inputSchema["properties"]) == set(["name", "description"])

@@ -126,6 +126,50 @@ class OpenAPIParser:
             
         return False
     
+    def _resolve_schema_ref(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Resolve a schema reference to its actual schema definition.
+        
+        Args:
+            schema: The schema that may contain a $ref
+            
+        Returns:
+            The resolved schema
+        """
+        if not isinstance(schema, dict):
+            return schema
+            
+        if '$ref' in schema:
+            ref = schema['$ref']
+            if not ref.startswith('#/'):
+                raise ValueError(f"Only local references are supported, got: {ref}")
+                
+            # Split the reference path and traverse the spec
+            parts = ref.lstrip('#/').split('/')
+            current = self.spec
+            for part in parts:
+                if part not in current:
+                    raise ValueError(f"Invalid reference path: {ref}")
+                current = current[part]
+            
+            # Recursively resolve any nested references
+            return self._resolve_schema_ref(current)
+        
+        # Recursively resolve references in nested objects
+        resolved = {}
+        for key, value in schema.items():
+            if isinstance(value, dict):
+                resolved[key] = self._resolve_schema_ref(value)
+            elif isinstance(value, list):
+                resolved[key] = [
+                    self._resolve_schema_ref(item) if isinstance(item, dict) else item
+                    for item in value
+                ]
+            else:
+                resolved[key] = value
+                
+        return resolved
+
     def _requires_bearer_auth(self, security_requirements: List[Dict[str, Any]]) -> bool:
         """
         Determine if a set of security requirements includes bearer token authentication.
@@ -264,13 +308,13 @@ class OpenAPIParser:
                     # Look for application/json content type first
                     json_content = content.get('application/json', {})
                     if json_content and 'schema' in json_content:
-                        endpoint.request_body_schema = json_content['schema']
+                        endpoint.request_body_schema = self._resolve_schema_ref(json_content['schema'])
                         endpoint.request_content_types.append('application/json')
                     else:
                         # If no JSON content type, use the first available content type
                         for content_type, content_info in content.items():
                             if 'schema' in content_info:
-                                endpoint.request_body_schema = content_info['schema']
+                                endpoint.request_body_schema = self._resolve_schema_ref(content_info['schema'])
                                 endpoint.request_content_types.append(content_type)
                                 break
                 
@@ -317,6 +361,8 @@ class OpenAPIParser:
                                 if field in param:
                                     param_schema[field] = param[field]
                         else:
+                            # Resolve any schema references
+                            param_schema = self._resolve_schema_ref(param_schema)
                             # Add description from parameter to schema if present
                             if 'description' in param:
                                 param_schema['description'] = param.get('description')
@@ -355,6 +401,8 @@ class OpenAPIParser:
                                 if field in param:
                                     param_schema[field] = param[field]
                         else:
+                            # Resolve any schema references
+                            param_schema = self._resolve_schema_ref(param_schema)
                             # Add description from parameter to schema if present
                             if 'description' in param:
                                 param_schema['description'] = param.get('description')
@@ -421,6 +469,8 @@ class OpenAPIParser:
                                 if field in param:
                                     param_schema[field] = param[field]
                         else:
+                            # Resolve any schema references
+                            param_schema = self._resolve_schema_ref(param_schema)
                             # Add description from parameter to schema if present
                             if 'description' in param:
                                 param_schema['description'] = param.get('description')
@@ -446,10 +496,24 @@ class OpenAPIParser:
                 # Extract response schemas
                 responses = operation.get('responses', {})
                 if responses:
-                    endpoint.responses = responses
+                    # Resolve any references in response schemas
+                    resolved_responses = {}
+                    for status_code, response in responses.items():
+                        resolved_response = response.copy()
+                        if 'content' in response:
+                            resolved_content = {}
+                            for content_type, content_info in response['content'].items():
+                                resolved_content_info = content_info.copy()
+                                if 'schema' in content_info:
+                                    resolved_content_info['schema'] = self._resolve_schema_ref(content_info['schema'])
+                                resolved_content[content_type] = resolved_content_info
+                            resolved_response['content'] = resolved_content
+                        resolved_responses[status_code] = resolved_response
+                    
+                    endpoint.responses = resolved_responses
                     
                     # Extract response content types
-                    for status_code, response in responses.items():
+                    for status_code, response in resolved_responses.items():
                         if 'content' in response:
                             for content_type in response['content']:
                                 if content_type not in endpoint.response_content_types:
