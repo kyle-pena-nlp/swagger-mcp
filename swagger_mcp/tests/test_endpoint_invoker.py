@@ -3,8 +3,8 @@ from unittest.mock import patch, MagicMock
 from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
 
-from endpoint import Endpoint
-from endpoint_invoker import (
+from swagger_mcp.endpoint import Endpoint
+from swagger_mcp.endpoint_invoker import (
     EndpointInvoker,
     MissingPathParameterError,
     MissingQueryParameterError,
@@ -114,7 +114,7 @@ class TestEndpointInvoker(unittest.TestCase):
             summary="No server endpoint"
         )
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_basic_endpoint_invocation(self, mock_request):
         """Test invoking a basic endpoint with no special requirements."""
         # Setup the mock
@@ -139,7 +139,7 @@ class TestEndpointInvoker(unittest.TestCase):
         # Check that we got the mock response back
         self.assertEqual(response, mock_response)
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_path_parameter_endpoint(self, mock_request):
         """Test invoking an endpoint with path parameters."""
         # Setup the mock
@@ -166,7 +166,7 @@ class TestEndpointInvoker(unittest.TestCase):
         # Check that the exception has the correct parameter name
         self.assertEqual(context.exception.param_name, 'userId')
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_query_parameter_endpoint(self, mock_request):
         """Test invoking an endpoint with query parameters."""
         # Setup the mock
@@ -193,7 +193,7 @@ class TestEndpointInvoker(unittest.TestCase):
         # Check that the exception has the correct parameter name
         self.assertEqual(context.exception.param_name, 'limit')
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_header_parameter_endpoint(self, mock_request):
         """Test invoking an endpoint with header parameters."""
         # Setup the mock
@@ -220,7 +220,7 @@ class TestEndpointInvoker(unittest.TestCase):
         # Check that the exception has the correct parameter name
         self.assertEqual(context.exception.param_name, 'X-API-Key')
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_auth_endpoint(self, mock_request):
         """Test invoking an endpoint that requires bearer authentication."""
         # Setup the mock
@@ -244,7 +244,7 @@ class TestEndpointInvoker(unittest.TestCase):
         with self.assertRaises(MissingBearerTokenError):
             invoker.invoke()
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_body_endpoint(self, mock_request):
         """Test invoking an endpoint that requires a request body."""
         # Setup the mock
@@ -278,7 +278,7 @@ class TestEndpointInvoker(unittest.TestCase):
         with self.assertRaises(MissingServerUrlError):
             invoker.invoke()
             
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_override_server_url(self, mock_request):
         """Test providing a server URL that overrides the endpoint's servers."""
         # Setup the mock
@@ -294,7 +294,7 @@ class TestEndpointInvoker(unittest.TestCase):
         call_args = mock_request.call_args[1]
         self.assertEqual(call_args['url'], 'https://custom-api.example.com/simple')
 
-    @patch('endpoint_invoker.requests.request')
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
     def test_custom_timeout(self, mock_request):
         """Test providing a custom timeout value."""
         # Setup the mock

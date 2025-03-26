@@ -1,8 +1,8 @@
 import unittest
 import json
 import os
-from openapi_parser import OpenAPIParser
-from endpoint import Endpoint
+from swagger_mcp.openapi_parser import OpenAPIParser
+from swagger_mcp.endpoint import Endpoint
 
 
 class TestOpenAPIParser(unittest.TestCase):
@@ -419,4 +419,4 @@ class TestOpenAPIParser(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    unittest.main() 
+    unittest.main()
