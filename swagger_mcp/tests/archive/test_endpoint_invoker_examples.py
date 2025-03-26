@@ -20,8 +20,8 @@ if os.path.exists(local_mcp_dir):
     sys.path.append(local_mcp_dir)
 
 # Import the required classes
-from openapi_parser import OpenAPIParser
-from endpoint_invoker import EndpointInvoker, EndpointInvocationError
+from swagger_mcp.openapi_parser import OpenAPIParser
+from swagger_mcp.endpoint_invoker import EndpointInvoker, EndpointInvocationError
 
 # URL for the OpenAPI spec
 OPENAPI_SPEC_URL = "http://localhost:9000/openapi.json"

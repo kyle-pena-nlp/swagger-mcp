@@ -538,6 +538,5 @@ class TestOpenAPIMCPServer:
         assert result[0].type == "text"
         assert result[0].text == "Tool not found: nonExistentTool"
 
-
 if __name__ == "__main__":
     pytest.main(["-xvs", "test_openapi_mcp_server.py"])
