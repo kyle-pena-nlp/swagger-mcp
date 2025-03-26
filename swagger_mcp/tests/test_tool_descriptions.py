@@ -1,11 +1,16 @@
 import pytest
+import os
 from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
 from mcp.types import Tool
-import asyncio
 
 @pytest.fixture
-def server():
-    server = OpenAPIMCPServer('Test Server', 'https://petstore.swagger.io/v2/swagger.json')
+def petstore_spec_path():
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(current_dir, 'fixtures', 'petstore.json')
+
+@pytest.fixture
+def server(petstore_spec_path):
+    server = OpenAPIMCPServer('Test Server', petstore_spec_path)
     return server
 
 @pytest.fixture

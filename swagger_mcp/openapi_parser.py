@@ -1,8 +1,9 @@
-from typing import Dict, List, Optional, Any, Set
+import os
 import json
 import requests
 import yaml
 
+from typing import Dict, List, Any, Optional, Union
 from swagger_mcp.endpoint import Endpoint
 
 
@@ -12,7 +13,7 @@ class OpenAPIParser:
     including HTTP methods and JSON schemas for request bodies.
     """
 
-    def __init__(self, spec: Dict[str, Any]):
+    def __init__(self, spec: Union[str, dict]):
         """
         Initialize the parser with an OpenAPI specification.
         
@@ -36,7 +37,7 @@ class OpenAPIParser:
         """
         return any(self._is_bearer_scheme(scheme_name) for scheme_name in self.security_schemes)
 
-    def _load_spec(self, spec: Dict[str, Any]) -> Dict[str, Any]:
+    def _load_spec(self, spec: Union[str, dict]) -> dict:
         """
         Load the OpenAPI specification from various input formats.
         
