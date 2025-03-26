@@ -1,30 +1,24 @@
-from typing import List, Dict, Any, Optional, Union, Callable, Awaitable, Iterator
-import asyncio
 import json
+import requests
+import os
+import yaml
 import logging
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-import sys
-import requests  # Add requests for URL fetching
+from typing import Dict, List, Optional, Any, Union, Callable, Awaitable, Iterator
 
 from mcp.server import Server, NotificationOptions
 from mcp.types import Tool, CallToolResult, TextContent, ImageContent, EmbeddedResource
-from openapi_parser import OpenAPIParser
-from simple_endpoint import SimpleEndpoint, create_simple_endpoint
-from endpoint_invoker import EndpointInvoker
 from mcp.server.stdio import stdio_server
 from mcp.server.models import InitializationOptions
+from swagger_mcp.openapi_parser import OpenAPIParser
+from swagger_mcp.endpoint import Endpoint
+from swagger_mcp.simple_endpoint import SimpleEndpoint, create_simple_endpoint
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-                   handlers=[
-                       logging.StreamHandler(),  # Console handler
-                       RotatingFileHandler(
-                           'openapi_mcp_server.log',
-                           maxBytes=10485760,  # 10MB
-                           backupCount=5
-                       )
-                   ])
+                   handlers=[logging.StreamHandler()])
 logger = logging.getLogger(__name__)
 
 class OpenAPIMCPServer:
@@ -283,6 +277,7 @@ def run_server(
 if __name__ == "__main__":
     # Simple CLI to start the server
     import argparse
+    import asyncio
     
     parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI spec")
     parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", nargs="?")

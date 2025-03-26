@@ -1,23 +1,20 @@
-from openapi_mcp_server import OpenAPIMCPServer
+import pytest
+from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
+from mcp.types import Tool
 import asyncio
-import json
 
-async def test():
-    # Create the server
+@pytest.fixture
+def server():
     server = OpenAPIMCPServer('Test Server', 'https://petstore.swagger.io/v2/swagger.json')
-    
-    # Register the handlers (this already happens in __init__)
-    # We need to access the tools a different way
-    
-    # Extract the tools from the server's simple_endpoints
+    return server
+
+@pytest.fixture
+def tools(server):
     tools = []
-    
     for operation_id, endpoint in server.simple_endpoints.items():
-        # Skip deprecated endpoints
         if endpoint.deprecated:
             continue
-        
-        # Create input schema from the endpoint's combined parameter schema
+            
         input_schema = {
             "type": "object",
             "properties": {},
@@ -29,19 +26,13 @@ async def test():
             if 'required' in endpoint.combined_parameter_schema:
                 input_schema["required"] = endpoint.combined_parameter_schema['required']
         
-        # Create the tool definition (similar to what happens in _register_handlers)
-        from mcp.types import Tool
-        
         description = ""
-        # Use summary as a title if available
         if endpoint.summary:
             description = endpoint.summary
         else:
             description = f"{endpoint.method.upper()} {endpoint.path}"
         
-        # Add the full description if available
         if endpoint.description and endpoint.description.strip():
-            # Add newline only if we already have content
             if description:
                 description += "\n\n"
             description += endpoint.description.strip()
@@ -52,20 +43,31 @@ async def test():
             inputSchema=input_schema
         )
         tools.append(tool)
-    
-    # Print information about the first 5 tools
-    print(f"Found {len(tools)} tools\n")
-    
-    for tool in tools[:5]:
-        print(f"Tool: {tool.name}")
-        print(f"Description: {tool.description}")
-        print("Schema properties:")
-        
-        for param_name, param_schema in tool.inputSchema.get('properties', {}).items():
-            desc = param_schema.get('description', 'No description')
-            print(f"  - {param_name}: {desc}")
-        
-        print()
+    return tools
 
-if __name__ == "__main__":
-    asyncio.run(test()) 
+@pytest.mark.asyncio
+async def test_tools_creation(tools):
+    """Test that tools are created successfully from the OpenAPI spec"""
+    assert len(tools) > 0, "Should create at least one tool"
+    
+@pytest.mark.asyncio
+async def test_tool_structure(tools):
+    """Test that each tool has the required attributes"""
+    for tool in tools:
+        assert isinstance(tool, Tool)
+        assert tool.name, "Tool should have a name"
+        assert tool.description, "Tool should have a description"
+        assert isinstance(tool.inputSchema, dict), "Tool should have an input schema"
+        assert "properties" in tool.inputSchema, "Input schema should have properties"
+
+@pytest.mark.asyncio
+async def test_tool_schema_properties(tools):
+    """Test that tool schemas have proper property structures"""
+    for tool in tools:
+        properties = tool.inputSchema.get('properties', {})
+        for param_name, param_schema in properties.items():
+            assert isinstance(param_name, str), "Parameter name should be a string"
+            assert isinstance(param_schema, dict), "Parameter schema should be a dictionary"
+            # Optional but common fields
+            if 'description' in param_schema:
+                assert isinstance(param_schema['description'], str)
