@@ -1,11 +1,12 @@
 from fastapi import FastAPI, HTTPException, Depends, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from typing import List, Optional
 import uuid
 import uvicorn
 import os
 from datetime import datetime
+from contextlib import asynccontextmanager
 
 from sample_rest_api.app.database import database, create_tables, categories, products
 from sample_rest_api.app.seed import seed_data
@@ -28,30 +29,32 @@ app.add_middleware(
 )
 
 # Events for database connection lifecycle
-@app.on_event("startup")
-async def startup():
-    # Create tables on startup
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Startup
     logger.info("Application starting up")
     logger.info("Creating database tables")
     create_tables()
-    # Connect to the database
     logger.info("Connecting to database")
     await database.connect()
-    # Seed initial data
+    logger.info("Database connection established")
     logger.info("Seeding initial data")
     await seed_data()
     logger.info("Application startup completed")
-
-@app.on_event("shutdown")
-async def shutdown():
-    # Disconnect from the database
+    
+    yield
+    
+    # Shutdown
     logger.info("Application shutting down")
     logger.info("Disconnecting from database")
     await database.disconnect()
     logger.info("Application shutdown complete")
 
+app.lifespan_context = lifespan
+
 # Models
 class CategoryBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     name: str
     description: Optional[str] = None
 
@@ -63,10 +66,8 @@ class Category(CategoryBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
-
 class ProductBase(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
     name: str
     description: Optional[str] = None
     price: float
@@ -81,9 +82,6 @@ class Product(ProductBase):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        orm_mode = True
-
 class SearchResults(BaseModel):
     products: List[Product]
     total_count: int
@@ -96,9 +94,8 @@ async def create_category(category: CategoryCreate):
     Create a new category with the given details
     """
     logger.info(f"Creating new category: {category.name}")
+    now = datetime.utcnow()
     category_id = str(uuid.uuid4())
-    now = datetime.now()
-    
     query = categories.insert().values(
         id=category_id,
         name=category.name,
@@ -106,11 +103,9 @@ async def create_category(category: CategoryCreate):
         created_at=now,
         updated_at=now
     )
-    
     await database.execute(query)
-    logger.info(f"Category created successfully with ID: {category_id}")
-    
-    return {**category.dict(), "id": category_id, "created_at": now, "updated_at": now}
+    category_data = category.model_dump()
+    return {**category_data, "id": category_id, "created_at": now, "updated_at": now}
 
 @app.get("/categories/", response_model=List[Category], tags=["categories"])
 async def list_categories(skip: int = 0, limit: int = 100):
@@ -154,13 +149,11 @@ async def update_category(category_id: str, category: CategoryCreate):
         raise HTTPException(status_code=404, detail="Category not found")
     
     # Update category
-    now = datetime.now()
+    now = datetime.utcnow()
     query = categories.update().where(categories.c.id == category_id).values(
-        name=category.name,
-        description=category.description,
+        **category.model_dump(),
         updated_at=now
     )
-    
     await database.execute(query)
     logger.info(f"Category updated successfully: {category.name}")
     
@@ -216,7 +209,7 @@ async def create_product(product: ProductCreate):
         raise HTTPException(status_code=400, detail="Category not found")
     
     product_id = str(uuid.uuid4())
-    now = datetime.now()
+    now = datetime.utcnow()
     
     query = products.insert().values(
         id=product_id,
@@ -232,7 +225,7 @@ async def create_product(product: ProductCreate):
     await database.execute(query)
     logger.info(f"Product created successfully with ID: {product_id}")
     
-    return {**product.dict(), "id": product_id, "created_at": now, "updated_at": now}
+    return {**product.model_dump(), "id": product_id, "created_at": now, "updated_at": now}
 
 @app.get("/products/", response_model=List[Product], tags=["products"])
 async def list_products(
@@ -303,13 +296,9 @@ async def update_product(product_id: str, product: ProductCreate):
         raise HTTPException(status_code=400, detail="Category not found")
     
     # Update product
-    now = datetime.now()
+    now = datetime.utcnow()
     query = products.update().where(products.c.id == product_id).values(
-        name=product.name,
-        description=product.description,
-        price=product.price,
-        category_id=product.category_id,
-        in_stock=product.in_stock,
+        **product.model_dump(),
         updated_at=now
     )
     
@@ -348,7 +337,7 @@ async def search_products(
     min_price: float = Query(None, ge=0),  # query parameter with validation
     max_price: float = Query(None, ge=0),  # query parameter with validation
     sort_by: str = Form(...),  # form field
-    sort_order: str = Form(default="asc", regex="^(asc|desc)$"),  # form field with validation
+    sort_order: str = Form(default="asc", pattern="^(asc|desc)$"),  # form field with validation
     page: int = Query(1, ge=1),  # query parameter with validation
     items_per_page: int = Query(10, ge=1, le=100)  # query parameter with validation
 ):
