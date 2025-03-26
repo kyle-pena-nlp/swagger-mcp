@@ -15,5 +15,8 @@ python -m pytest swagger_mcp/tests/test_tool_descriptions.py -v
 echo "2. Running test_parameter_descriptions.py..."
 python -m pytest swagger_mcp/tests/test_parameter_descriptions.py -v
 
+echo "3. Running test_openapi_parser.py..."
+python -m pytest swagger_mcp/tests/test_openapi_parser.py -v
+
 # If we get here, all tests passed
 echo "✅ All tests passed!"
