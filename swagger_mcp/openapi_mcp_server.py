@@ -30,7 +30,7 @@ class OpenAPIMCPServer:
     def __init__(
         self, 
         server_name: str, 
-        openapi_spec: str,  # Changed parameter name from openapi_spec_path to openapi_spec
+        openapi_spec: Union[str, Dict[str, Any]],  # Changed parameter name from openapi_spec_path to openapi_spec
         server_url: Optional[str] = None,
         bearer_token: Optional[str] = None,
         server_version: Optional[str] = "1.0.0",
@@ -70,7 +70,7 @@ class OpenAPIMCPServer:
         # Load and parse the OpenAPI spec
         try:
             # Check if the spec is a URL
-            if openapi_spec.startswith(('http://', 'https://')):
+            if isinstance(openapi_spec, str) and openapi_spec.startswith(('http://', 'https://')):
                 logger.info(f"Fetching OpenAPI spec from URL: {openapi_spec}")
                 response = requests.get(openapi_spec)
                 response.raise_for_status()  # Raise exception for non-200 status codes
@@ -84,6 +84,9 @@ class OpenAPIMCPServer:
                     spec_content = response.text
                 
                 self.openapi_parser = OpenAPIParser(spec_content)
+            elif isinstance(openapi_spec, dict):
+                # Treat as dictionary
+                self.openapi_parser = OpenAPIParser(openapi_spec)
             else:
                 # Treat as file path
                 self.openapi_parser = OpenAPIParser(openapi_spec)
@@ -211,6 +214,8 @@ class OpenAPIMCPServer:
                 logger.error(f"Traceback: {error_trace}")
                 return [TextContent(type="text", text=f"Error calling tool {name}: {str(e)}\n{error_trace}")]
 
+        # For the purposes of testing, return the handlers so they can be manually invoked by tests
+        return { "list_tools": list_tools, "call_tool": call_tool }
 
     async def run(self):
        async with stdio_server() as (read_stream, write_stream):

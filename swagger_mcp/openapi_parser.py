@@ -261,10 +261,18 @@ class OpenAPIParser:
                     endpoint.request_body_required = request_body.get('required', False)
                     content = request_body.get('content', {})
                     
-                    for content_type, content_info in content.items():
-                        endpoint.request_content_types.append(content_type)
-                        if content_type == 'application/json' and 'schema' in content_info:
-                            endpoint.request_body_schema = content_info['schema']
+                    # Look for application/json content type first
+                    json_content = content.get('application/json', {})
+                    if json_content and 'schema' in json_content:
+                        endpoint.request_body_schema = json_content['schema']
+                        endpoint.request_content_types.append('application/json')
+                    else:
+                        # If no JSON content type, use the first available content type
+                        for content_type, content_info in content.items():
+                            if 'schema' in content_info:
+                                endpoint.request_body_schema = content_info['schema']
+                                endpoint.request_content_types.append(content_type)
+                                break
                 
                 # Extract parameters (both from operation and path item levels)
                 parameters = []
@@ -296,7 +304,11 @@ class OpenAPIParser:
                     
                     for param in query_params:
                         param_name = param.get('name', '')
-                        param_schema = param.get('schema', {})
+                        param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
+                        
+                        # Add description from parameter to schema if present
+                        if 'description' in param:
+                            param_schema['description'] = param.get('description')
                         
                         query_schema['properties'][param_name] = param_schema
                         
@@ -319,7 +331,11 @@ class OpenAPIParser:
                     
                     for param in path_params:
                         param_name = param.get('name', '')
-                        param_schema = param.get('schema', {})
+                        param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
+                        
+                        # Add description from parameter to schema if present
+                        if 'description' in param:
+                            param_schema['description'] = param.get('description')
                         
                         path_schema['properties'][param_name] = param_schema
                         
@@ -343,7 +359,11 @@ class OpenAPIParser:
                     
                     for param in header_params:
                         param_name = param.get('name', '')
-                        param_schema = param.get('schema', {})
+                        param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
+                        
+                        # Add description from parameter to schema if present
+                        if 'description' in param:
+                            param_schema['description'] = param.get('description')
                         
                         header_schema['properties'][param_name] = param_schema
                         
@@ -366,7 +386,7 @@ class OpenAPIParser:
                     
                     for param in form_params:
                         param_name = param.get('name', '')
-                        param_schema = param.get('schema', {}) or {}
+                        param_schema = param.get('schema', {}).copy() or {}  # Make a copy to avoid modifying original
                         
                         # Some OpenAPI 2.0 specs use 'type' directly instead of 'schema'
                         if not param_schema and 'type' in param:
@@ -377,8 +397,10 @@ class OpenAPIParser:
                                 param_schema['enum'] = param.get('enum')
                             if 'default' in param:
                                 param_schema['default'] = param.get('default')
-                            if 'description' in param:
-                                param_schema['description'] = param.get('description')
+                        
+                        # Add description from parameter to schema if present
+                        if 'description' in param:
+                            param_schema['description'] = param.get('description')
                         
                         form_schema['properties'][param_name] = param_schema
                         

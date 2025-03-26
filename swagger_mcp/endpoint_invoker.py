@@ -264,7 +264,7 @@ class EndpointInvoker:
         content_type = None
         if headers and 'Content-Type' in headers:
             content_type = headers['Content-Type']
-        elif endpoint_to_use.request_content_types:
+        elif hasattr(endpoint_to_use, 'request_content_types') and endpoint_to_use.request_content_types:
             # Use the first available content type as default
             content_type = endpoint_to_use.request_content_types[0]
             # Add content type to headers
@@ -312,7 +312,6 @@ class EndpointInvoker:
                 json_data = request_body
             else:
                 data = request_body
-        
         
         # Create a detailed log message with all request components
         log_message = f"""
@@ -460,19 +459,31 @@ Request details:
         Raises:
             MissingQueryParameterError: If a required query parameter is missing
         """
-        query_params = query_params or {}
+        if not query_params:
+            query_params = {}
+            
+        # Get required query parameters from the endpoint
+        required_params = set()
+        if hasattr(endpoint_to_use, 'get_required_parameters'):
+            required_params = endpoint_to_use.get_required_parameters().get('query', set())
         
-        # Different validation for SimpleEndpoint vs Endpoint
-        if isinstance(endpoint_to_use, SimpleEndpoint):
-            # SimpleEndpoint required params are validated in invoke_with_params
-            pass
-        else:
-            # Regular Endpoint has separate query parameter tracking
-            required_params = endpoint_to_use.get_required_parameters()
-            for param_name in required_params.get('query', set()):
-                if param_name not in query_params:
-                    raise MissingQueryParameterError(param_name)
-                
+        # Check that all required parameters are present
+        for param_name in required_params:
+            if param_name not in query_params:
+                raise MissingQueryParameterError(param_name)
+        
+        # Handle array parameters
+        if hasattr(endpoint_to_use, 'parameters'):
+            for param in endpoint_to_use.parameters:
+                if param['in'] == 'query' and param['name'] in query_params:
+                    value = query_params[param['name']]
+                    if param['schema'].get('type') == 'array':
+                        # For array parameters, create multiple entries with the same name
+                        if isinstance(value, (list, tuple)):
+                            query_params[param['name']] = value
+                        else:
+                            query_params[param['name']] = [value]
+        
         return query_params
     
     def _validate_form_params(self, 
@@ -539,36 +550,44 @@ Request details:
         if not hasattr(endpoint_to_use, 'request_body_schema') or not endpoint_to_use.request_body_schema or not request_body:
             return request_body
 
-        # Get the schema from the endpoint
+        # Get the schema from the endpoint and content type
         schema = endpoint_to_use.request_body_schema
-        
-        # Check required fields
-        if 'required' in schema and isinstance(schema['required'], list):
-            for field in schema['required']:
-                if field not in request_body:
-                    raise InvalidRequestBodyError(f"Missing required field: {field}")
+        content_type = None
+        if hasattr(endpoint_to_use, 'request_content_types') and endpoint_to_use.request_content_types:
+            content_type = endpoint_to_use.request_content_types[0]
 
-        # Check field types and constraints
-        if 'properties' in schema and isinstance(schema['properties'], dict):
-            for field, field_schema in schema['properties'].items():
-                if field in request_body:
-                    value = request_body[field]
-                    
-                    # Check type
-                    field_type = field_schema.get('type')
-                    if field_type == 'string' and not isinstance(value, str):
-                        raise InvalidRequestBodyError(f"Field '{field}' must be a string")
-                    elif field_type == 'integer' and not isinstance(value, int):
-                        raise InvalidRequestBodyError(f"Field '{field}' must be an integer")
-                    elif field_type == 'array' and not isinstance(value, list):
-                        raise InvalidRequestBodyError(f"Field '{field}' must be an array")
-                    
-                    # Check enum values
-                    if 'enum' in field_schema and value not in field_schema['enum']:
-                        raise InvalidRequestBodyError(f"Field '{field}' must be one of: {field_schema['enum']}")
-                    
-                    # Check minimum value for integers
-                    if field_type == 'integer' and 'minimum' in field_schema and value < field_schema['minimum']:
-                        raise InvalidRequestBodyError(f"Field '{field}' must be greater than or equal to {field_schema['minimum']}")
+        # Extract the schema based on content type
+        if content_type and schema:
+            if 'content' in schema and content_type in schema['content']:
+                content_schema = schema['content'][content_type].get('schema', {})
+                
+                # Check required fields
+                if 'required' in content_schema and isinstance(content_schema['required'], list):
+                    for field in content_schema['required']:
+                        if field not in request_body:
+                            raise InvalidRequestBodyError(f"Missing required field: {field}")
+
+                # Check field types and constraints
+                if 'properties' in content_schema and isinstance(content_schema['properties'], dict):
+                    for field, field_schema in content_schema['properties'].items():
+                        if field in request_body:
+                            value = request_body[field]
+                            
+                            # Check type
+                            field_type = field_schema.get('type')
+                            if field_type == 'string' and not isinstance(value, str):
+                                raise InvalidRequestBodyError(f"Field '{field}' must be a string")
+                            elif field_type == 'integer' and not isinstance(value, int):
+                                raise InvalidRequestBodyError(f"Field '{field}' must be an integer")
+                            elif field_type == 'array' and not isinstance(value, list):
+                                raise InvalidRequestBodyError(f"Field '{field}' must be an array")
+                            
+                            # Check enum values
+                            if 'enum' in field_schema and value not in field_schema['enum']:
+                                raise InvalidRequestBodyError(f"Field '{field}' must be one of: {field_schema['enum']}")
+                            
+                            # Check minimum value for integers
+                            if field_type == 'integer' and 'minimum' in field_schema and value < field_schema['minimum']:
+                                raise InvalidRequestBodyError(f"Field '{field}' must be greater than or equal to {field_schema['minimum']}")
 
         return request_body

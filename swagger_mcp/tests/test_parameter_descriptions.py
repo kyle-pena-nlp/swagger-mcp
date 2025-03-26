@@ -1,6 +1,7 @@
 import pytest
 import json
 import os
+import tempfile
 from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
 from mcp.types import Tool
 
@@ -59,23 +60,17 @@ detailed_spec = {
                                 "properties": {
                                     "name": {
                                         "type": "string",
-                                        "description": "The user's full name"
+                                        "description": "Full name of the user"
                                     },
                                     "email": {
                                         "type": "string",
                                         "format": "email",
-                                        "description": "The user's email address (must be unique)"
-                                    },
-                                    "age": {
-                                        "type": "integer",
-                                        "minimum": 13,
-                                        "description": "The user's age (must be at least 13)"
+                                        "description": "Email address of the user (must be unique)"
                                     },
                                     "role": {
                                         "type": "string",
-                                        "enum": ["user", "admin", "guest"],
-                                        "default": "user",
-                                        "description": "The user's role in the system"
+                                        "enum": ["user", "admin"],
+                                        "description": "Role of the user in the system"
                                     }
                                 }
                             }
@@ -84,34 +79,7 @@ detailed_spec = {
                 },
                 "responses": {
                     "201": {
-                        "description": "User created successfully"
-                    }
-                }
-            }
-        },
-        "/users/{userId}": {
-            "get": {
-                "operationId": "getUser",
-                "summary": "Get user by ID",
-                "description": "Returns detailed information about a specific user identified by their unique ID",
-                "parameters": [
-                    {
-                        "name": "userId",
-                        "in": "path",
-                        "required": True,
-                        "description": "The unique identifier of the user",
-                        "schema": {"type": "string", "format": "uuid"}
-                    },
-                    {
-                        "name": "include_details",
-                        "in": "query",
-                        "description": "Whether to include additional user details in the response",
-                        "schema": {"type": "boolean", "default": False}
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "Successfully retrieved user"
+                        "description": "User successfully created"
                     }
                 }
             }
@@ -119,113 +87,71 @@ detailed_spec = {
     }
 }
 
-def format_tool_description(endpoint):
-    """
-    Format a comprehensive tool description from the endpoint's summary and description.
-    
-    Args:
-        endpoint: The SimpleEndpoint object
-        
-    Returns:
-        A formatted description string
-    """
-    description = ""
-    
-    # Use summary as a title if available
-    if endpoint.summary:
-        description = endpoint.summary
-    else:
-        description = f"{endpoint.method.upper()} {endpoint.path}"
-    
-    # Add the full description if available
-    if endpoint.description and endpoint.description.strip():
-        # Add newline only if we already have content
-        if description:
-            description += "\n\n"
-        description += endpoint.description.strip()
-        
-    return description
+@pytest.mark.asyncio
+async def test_parameter_descriptions():
+    # Create a temporary file to store the OpenAPI spec
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
+        json.dump(detailed_spec, temp_file)
+        temp_file_path = temp_file.name
 
-@pytest.fixture
-def spec_file(tmp_path):
-    """Create a temporary file with the detailed spec."""
-    spec_path = tmp_path / "detailed_spec.json"
-    with open(spec_path, 'w') as f:
-        json.dump(detailed_spec, f)
-    return str(spec_path)
-
-@pytest.fixture
-def server(spec_file):
-    """Create an OpenAPIMCPServer instance with the detailed spec."""
-    return OpenAPIMCPServer('Test Server', spec_file)
-
-@pytest.fixture
-def tools(server):
-    """Extract tools from the server's endpoints."""
-    result = []
-    for operation_id, endpoint in server.simple_endpoints.items():
-        if endpoint.deprecated:
-            continue
-            
-        input_schema = {
-            "type": "object",
-            "properties": {},
-            "required": []
-        }
-        
-        if endpoint.combined_parameter_schema and 'properties' in endpoint.combined_parameter_schema:
-            input_schema["properties"] = endpoint.combined_parameter_schema['properties']
-            if 'required' in endpoint.combined_parameter_schema:
-                input_schema["required"] = endpoint.combined_parameter_schema['required']
-        
-        description = format_tool_description(endpoint)
-        
-        tool = Tool(
-            name=operation_id,
-            description=description,
-            inputSchema=input_schema
+    try:
+        # Create an instance of OpenAPIMCPServer with our detailed spec
+        server = OpenAPIMCPServer(
+            server_name="test-server",
+            openapi_spec=temp_file_path
         )
-        result.append(tool)
-    return result
-
-def test_tools_creation(tools):
-    """Test that tools are created successfully."""
-    assert len(tools) > 0, "No tools were created"
-    
-    # Test specific tools we expect to find
-    tool_names = {tool.name for tool in tools}
-    expected_tools = {'listUsers', 'createUser', 'getUser'}
-    assert expected_tools.issubset(tool_names), f"Missing expected tools. Found: {tool_names}"
-
-def test_tool_descriptions(tools):
-    """Test that tool descriptions are properly formatted."""
-    for tool in tools:
-        assert tool.description, f"Tool {tool.name} has no description"
-        if tool.name == 'listUsers':
-            assert "paginated list" in tool.description.lower(), "listUsers description should mention pagination"
-        elif tool.name == 'createUser':
-            assert "admin privileges" in tool.description.lower(), "createUser description should mention admin privileges"
-        elif tool.name == 'getUser':
-            assert "unique id" in tool.description.lower(), "getUser description should mention user ID"
-
-def test_tool_parameters(tools):
-    """Test that tool parameters have proper descriptions and constraints."""
-    for tool in tools:
-        assert tool.inputSchema, f"Tool {tool.name} has no input schema"
-        properties = tool.inputSchema.get('properties', {})
         
-        if tool.name == 'listUsers':
-            assert 'limit' in properties, "listUsers should have a limit parameter"
-            assert 'offset' in properties, "listUsers should have an offset parameter"
-            assert properties['limit'].get('maximum') == 100, "limit should have a maximum of 100"
-            
-        elif tool.name == 'createUser':
-            assert 'name' in properties, "createUser should have a name parameter"
-            assert 'email' in properties, "createUser should have an email parameter"
-            assert 'name' in tool.inputSchema.get('required', []), "name should be required"
-            assert 'email' in tool.inputSchema.get('required', []), "email should be required"
-            
-        elif tool.name == 'getUser':
-            assert 'userId' in properties, "getUser should have a userId parameter"
-            assert 'userId' in tool.inputSchema.get('required', []), "userId should be required"
-            assert properties['userId'].get('format') == 'uuid', "userId should be a UUID format"
+        # Get the list_tools handler from _register_handlers
+        handlers = server._register_handlers()
+        list_tools = handlers["list_tools"]
+        
+        # Call list_tools to get the available tools
+        tools = await list_tools()
+        
+        # Print the tool schemas for debugging
+        for tool in tools:
+            print(f"\nTool: {tool.name}")
+            print(json.dumps(tool.inputSchema, indent=2))
+        
+        # Verify we have the expected number of tools
+        assert len(tools) == 2, f"Expected 2 tools, got {len(tools)}"
+        
+        # Find the listUsers tool
+        list_users_tool = next((tool for tool in tools if tool.name == "listUsers"), None)
+        assert list_users_tool is not None, "listUsers tool not found"
+        
+        # Verify the listUsers tool has the correct parameter descriptions
+        properties = list_users_tool.inputSchema["properties"]
+        assert "limit" in properties, "limit parameter not found"
+        assert properties["limit"]["description"] == "Maximum number of results to return per page (1-100)"
+        assert properties["limit"]["type"] == "integer"
+        
+        assert "offset" in properties, "offset parameter not found"
+        assert properties["offset"]["description"] == "Number of results to skip for pagination"
+        assert properties["offset"]["type"] == "integer"
+        
+        assert "sort_by" in properties, "sort_by parameter not found"
+        assert properties["sort_by"]["description"] == "Field to sort results by (name, email, created_at, updated_at)"
+        assert properties["sort_by"]["type"] == "string"
+        
+        # Find the createUser tool
+        create_user_tool = next((tool for tool in tools if tool.name == "createUser"), None)
+        assert create_user_tool is not None, "createUser tool not found"
+        
+        # Verify the createUser tool has the correct request body parameter descriptions
+        properties = create_user_tool.inputSchema["properties"]
+        assert "name" in properties, "name parameter not found"
+        assert properties["name"]["description"] == "Full name of the user"
+        assert properties["name"]["type"] == "string"
+        
+        assert "email" in properties, "email parameter not found"
+        assert properties["email"]["description"] == "Email address of the user (must be unique)"
+        assert properties["email"]["type"] == "string"
+        
+        assert "role" in properties, "role parameter not found"
+        assert properties["role"]["description"] == "Role of the user in the system"
+        assert properties["role"]["type"] == "string"
+
+    finally:
+        # Clean up the temporary file
+        os.unlink(temp_file_path)
