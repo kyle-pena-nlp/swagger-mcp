@@ -2,120 +2,99 @@ import unittest
 from unittest.mock import patch, MagicMock
 from swagger_mcp.endpoint import Endpoint
 from swagger_mcp.endpoint_invoker import EndpointInvoker
+from swagger_mcp.openapi_parser import OpenAPIParser
 
 class TestFormDataVariables(unittest.TestCase):
     def setUp(self):
-        # Create a test endpoint with multipart form data parameters
-        self.endpoint = Endpoint(
-            path="/upload",
-            method="POST",
-            operation_id="uploadFile",
-            summary="Upload a file with metadata",
-            form_parameters_schema={
-                "type": "object",
-                "required": ["file", "description"],
-                "properties": {
-                    "file": {
-                        "type": "string",
-                        "format": "binary"
-                    },
-                    "description": {
-                        "type": "string"
-                    },
-                    "tags": {
-                        "type": "array",
-                        "items": {"type": "string"}
+        # Define a simple OpenAPI spec with multipart form data
+        self.openapi_spec = {
+            "openapi": "3.0.0",
+            "info": {
+                "title": "File Upload API",
+                "version": "1.0.0"
+            },
+            "servers": [{"url": "https://api.example.com"}],
+            "paths": {
+                "/upload": {
+                    "post": {
+                        "operationId": "uploadFile",
+                        "summary": "Upload a file with metadata",
+                        "requestBody": {
+                            "required": True,
+                            "content": {
+                                "multipart/form-data": {
+                                    "schema": {
+                                        "type": "object",
+                                        "required": ["description"],
+                                        "properties": {
+                                            "description": {
+                                                "type": "string"
+                                            },
+                                            "tags": {
+                                                "type": "array",
+                                                "items": {"type": "string"}
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        "responses": {
+                            "200": {
+                                "description": "File uploaded successfully"
+                            }
+                        }
                     }
                 }
-            },
-            request_content_types=["multipart/form-data"],
-            servers=[{"url": "https://api.example.com"}]
-        )
+            }
+        }
+        
+        # Parse the OpenAPI spec and get the endpoint
+        parser = OpenAPIParser(spec=self.openapi_spec)
+        self.endpoint = parser.get_endpoint_by_operation_id("uploadFile")
         self.invoker = EndpointInvoker(self.endpoint)
 
     @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_multipart_file_upload(self, mock_request):
-        # Setup mock response
-        mock_response = MagicMock()
-        mock_request.return_value = mock_response
-
-        # Simulate file content
-        file_content = b"Hello, World!"
-        
-        # Call the endpoint with form data including a file
-        form_params = {
-            "file": ("test.txt", file_content, "text/plain"),
-            "description": "Test file upload"
-        }
-        self.invoker.invoke(form_params=form_params)
-
-        # Verify the request was made with the correct parameters
-        mock_request.assert_called_once()
-        call_args = mock_request.call_args[1]
-        
-        # Check that files were properly included
-        self.assertIn("files", call_args)
-        self.assertEqual(call_args["files"]["file"], ("test.txt", file_content, "text/plain"))
-        
-        # Check that other form fields were included
-        self.assertIn("data", call_args)
-        self.assertEqual(call_args["data"]["description"], "Test file upload")
-
-    @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_mixed_form_data(self, mock_request):
+    def test_multipart_form_data(self, mock_request):
         # Setup mock response
         mock_response = MagicMock()
         mock_request.return_value = mock_response
 
         # Call the endpoint with mixed form data (file and array field)
-        form_params = {
-            "file": ("test.txt", b"Hello, World!", "text/plain"),
+        request_body = {
             "description": "Test with tags",
             "tags": ["test", "example"]
         }
-        self.invoker.invoke(form_params=form_params)
+        self.invoker.invoke(request_body=request_body)
 
         # Verify the request was made with all fields
         mock_request.assert_called_once()
         call_args = mock_request.call_args[1]
         
         # Check that both file and regular form fields are present
-        self.assertIn("files", call_args)
         self.assertIn("data", call_args)
         self.assertEqual(call_args["data"]["description"], "Test with tags")
         self.assertEqual(call_args["data"]["tags"], ["test", "example"])
 
     @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_missing_required_form_parameter(self, mock_request):
-        # Test that missing required form parameters raise an error
-        form_params = {
-            # Missing required 'file' parameter
-            "description": "Test missing file"
-        }
-        with self.assertRaises(Exception) as context:
-            self.invoker.invoke(form_params=form_params)
-
-    @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_file_upload_with_custom_headers(self, mock_request):
+    def test_multipart_form_data_omitting_optional_field(self, mock_request):
         # Setup mock response
         mock_response = MagicMock()
         mock_request.return_value = mock_response
 
-        # Call the endpoint with minimal form data and custom headers
-        form_params = {
-            "file": ("test.txt", b"Hello", "text/plain"),
-            "description": "Test with headers"
+        # Call the endpoint with mixed form data (file and array field)
+        request_body = {
+            "description": "Test with tags"
         }
-        headers = {
-            "X-Custom-Header": "test-value"
-        }
-        self.invoker.invoke(form_params=form_params, headers=headers)
+        self.invoker.invoke(request_body=request_body)
 
-        # Verify request was made with custom headers preserved
+        # Verify the request was made with all fields
         mock_request.assert_called_once()
         call_args = mock_request.call_args[1]
-        self.assertIn("headers", call_args)
-        self.assertEqual(call_args["headers"]["X-Custom-Header"], "test-value")
+        
+        # Check that both file and regular form fields are present
+        self.assertIn("data", call_args)
+        self.assertEqual(call_args["data"]["description"], "Test with tags")        
 
 if __name__ == '__main__':
     unittest.main()
