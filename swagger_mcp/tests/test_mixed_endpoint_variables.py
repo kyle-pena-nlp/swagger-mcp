@@ -1,13 +1,12 @@
-import unittest
+import pytest
 from unittest.mock import patch, MagicMock
-from swagger_mcp.endpoint import Endpoint
-from swagger_mcp.endpoint_invoker import EndpointInvoker
-from swagger_mcp.openapi_parser import OpenAPIParser
+from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
 
-class TestMixedEndpointVariables(unittest.TestCase):
-    def setUp(self):
+class TestMixedEndpointVariables:
+    @pytest.fixture
+    def server(self):
         # Define an OpenAPI spec with multiple endpoints using different combinations
-        self.openapi_spec = {
+        openapi_spec = {
             "openapi": "3.0.0",
             "info": {
                 "title": "Pet API",
@@ -109,75 +108,71 @@ class TestMixedEndpointVariables(unittest.TestCase):
             }
         }
 
-    @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_path_params_and_form_data(self, mock_request):
-        """Test endpoint with path parameters and form data (text fields only)."""
-        # Parse the OpenAPI spec and get the endpoint
-        parser = OpenAPIParser(spec=self.openapi_spec)
-        endpoint = parser.get_endpoint_by_operation_id("updatePetDetails")
-        invoker = EndpointInvoker(endpoint)
+        server = OpenAPIMCPServer('Test Server', openapi_spec)
+        return server
 
+    @pytest.mark.asyncio
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
+    async def test_path_params_and_form_data(self, mock_request, server):
+        """Test endpoint with path parameters and form data (text fields only)."""
         # Setup mock response
         mock_response = MagicMock()
         mock_request.return_value = mock_response
 
+        # Get the call_tool handler
+        handlers = server._register_handlers()
+        call_tool = handlers["call_tool"]
+
         # Call the endpoint with path params and form data
-        path_params = {"petId": 123}
-        request_body = {
+        await call_tool("updatePetDetails", {
+            "petId": 123,
             "name": "Max",
             "breed": "Golden Retriever",
             "color": "Golden"
-        }
-        invoker.invoke(path_params=path_params, request_body=request_body)
+        })
 
         # Verify the request was made with correct parameters
         mock_request.assert_called_once()
         call_args = mock_request.call_args[1]
         
         # Check URL contains path parameter
-        self.assertIn("123", call_args["url"])
+        assert "123" in call_args["url"]
         
         # Check form data
-        self.assertEqual(call_args["data"]["name"], "Max")
-        self.assertEqual(call_args["data"]["breed"], "Golden Retriever")
-        self.assertEqual(call_args["data"]["color"], "Golden")
+        assert call_args["data"]["name"] == "Max"
+        assert call_args["data"]["breed"] == "Golden Retriever"
+        assert call_args["data"]["color"] == "Golden"
 
+    @pytest.mark.asyncio
     @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_path_params_and_json_body(self, mock_request):
+    async def test_path_params_and_json_body(self, mock_request, server):
         """Test endpoint with path parameters and JSON request body."""
-        # Parse the OpenAPI spec and get the endpoint
-        parser = OpenAPIParser(spec=self.openapi_spec)
-        endpoint = parser.get_endpoint_by_operation_id("updateMedicalRecord")
-        invoker = EndpointInvoker(endpoint)
-
         # Setup mock response
         mock_response = MagicMock()
         mock_request.return_value = mock_response
 
+        # Get the call_tool handler
+        handlers = server._register_handlers()
+        call_tool = handlers["call_tool"]
+
         # Call the endpoint with path params and JSON body
-        path_params = {
+        await call_tool("updateMedicalRecord", {
             "petId": 123,
-            "recordId": "REC-456"
-        }
-        request_body = {
+            "recordId": "REC-456",
             "diagnosis": "Healthy",
             "treatment": "Annual checkup",
             "notes": ["Weight is normal", "No issues found"]
-        }
-        invoker.invoke(path_params=path_params, request_body=request_body)
+        })
 
         # Verify the request was made with correct parameters
         mock_request.assert_called_once()
         call_args = mock_request.call_args[1]
         
         # Check URL contains path parameters
-        self.assertIn("123", call_args["url"])
-        self.assertIn("REC-456", call_args["url"])
+        assert "123" in call_args["url"]
+        assert "REC-456" in call_args["url"]
         
         # Check JSON body
-        self.assertEqual(call_args["json"]["diagnosis"], "Healthy")
-        self.assertEqual(call_args["json"]["treatment"], "Annual checkup")
-        self.assertEqual(call_args["json"]["notes"], ["Weight is normal", "No issues found"])
-
-if __name__ == '__main__':
-    unittest.main()
+        assert call_args["json"]["diagnosis"] == "Healthy"
+        assert call_args["json"]["treatment"] == "Annual checkup"
+        assert call_args["json"]["notes"] == ["Weight is normal", "No issues found"]

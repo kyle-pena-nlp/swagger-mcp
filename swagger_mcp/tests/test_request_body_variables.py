@@ -1,13 +1,12 @@
-import unittest
+import pytest
 from unittest.mock import patch, MagicMock
-from swagger_mcp.endpoint import Endpoint
-from swagger_mcp.endpoint_invoker import EndpointInvoker
-from swagger_mcp.openapi_parser import OpenAPIParser
+from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
 
-class TestRequestBodyVariables(unittest.TestCase):
-    def setUp(self):
+class TestRequestBodyVariables:
+    @pytest.fixture
+    def server(self):
         # Define a simple OpenAPI spec with request body
-        self.openapi_spec = {
+        openapi_spec = {
             "openapi": "3.0.0",
             "info": {
                 "title": "Pet API",
@@ -59,58 +58,61 @@ class TestRequestBodyVariables(unittest.TestCase):
             }
         }
         
-        # Parse the OpenAPI spec and get the endpoint
-        parser = OpenAPIParser(spec=self.openapi_spec)
-        self.endpoint = parser.get_endpoint_by_operation_id("createPet")
-        self.invoker = EndpointInvoker(self.endpoint)
+        server = OpenAPIMCPServer('Test Server', openapi_spec)
+        return server
 
+    @pytest.mark.asyncio
     @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_request_body_with_required_fields(self, mock_request):
+    async def test_request_body_with_required_fields(self, mock_request, server):
         # Setup mock response
         mock_response = MagicMock()
         mock_request.return_value = mock_response
 
+        # Get the call_tool handler
+        handlers = server._register_handlers()
+        call_tool = handlers["call_tool"]
+
         # Call the endpoint with required fields
-        request_body = {
+        await call_tool("createPet", {
             "name": "Fluffy",
             "type": "dog"
-        }
-        self.invoker.invoke(request_body=request_body)
+        })
 
         # Verify the request was made with correct parameters
         mock_request.assert_called_once()
         call_args = mock_request.call_args[1]
         
         # Check that request body was properly included
-        self.assertIn("json", call_args)
-        self.assertEqual(call_args["json"]["name"], "Fluffy")
-        self.assertEqual(call_args["json"]["type"], "dog")
+        assert "json" in call_args
+        assert call_args["json"]["name"] == "Fluffy"
+        assert call_args["json"]["type"] == "dog"
 
+    @pytest.mark.asyncio
     @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_request_body_with_all_fields(self, mock_request):
+    async def test_request_body_with_all_fields(self, mock_request, server):
         # Setup mock response
         mock_response = MagicMock()
         mock_request.return_value = mock_response
 
+        # Get the call_tool handler
+        handlers = server._register_handlers()
+        call_tool = handlers["call_tool"]
+
         # Call the endpoint with all fields
-        request_body = {
+        await call_tool("createPet", {
             "name": "Whiskers",
             "type": "cat",
             "age": 5,
             "tags": ["friendly", "indoor"]
-        }
-        self.invoker.invoke(request_body=request_body)
+        })
 
         # Verify the request was made with correct parameters
         mock_request.assert_called_once()
         call_args = mock_request.call_args[1]
         
         # Check that all fields were properly included
-        self.assertIn("json", call_args)
-        self.assertEqual(call_args["json"]["name"], "Whiskers")
-        self.assertEqual(call_args["json"]["type"], "cat")
-        self.assertEqual(call_args["json"]["age"], 5)
-        self.assertEqual(call_args["json"]["tags"], ["friendly", "indoor"])
-
-if __name__ == '__main__':
-    unittest.main()
+        assert "json" in call_args
+        assert call_args["json"]["name"] == "Whiskers"
+        assert call_args["json"]["type"] == "cat"
+        assert call_args["json"]["age"] == 5
+        assert call_args["json"]["tags"] == ["friendly", "indoor"]
