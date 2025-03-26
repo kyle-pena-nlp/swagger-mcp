@@ -27,4 +27,5 @@ setup_venv() {
 }
 
 # Set up the main project's virtual environment
+setup_venv "$PROJECT_ROOT/.venv" "$PROJECT_ROOT/requirements-dev.txt"
 setup_venv "$PROJECT_ROOT/.venv" "$PROJECT_ROOT/requirements.txt"

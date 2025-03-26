@@ -6,6 +6,9 @@ set -e
 # Change to the project root directory
 cd "$(dirname "$0")/.."
 
+# Ensure we're using the development virtual environment
+source "$SCRIPT_DIR/setup_dev_venv.sh"
+
 # Run the specified test files
 echo "Running fixed test suite..."
 
@@ -41,3 +44,5 @@ python -m pytest swagger_mcp/tests/test_url_usage.py -v
 
 # If we get here, all tests passed
 echo "✅ All tests passed!"
+
+
