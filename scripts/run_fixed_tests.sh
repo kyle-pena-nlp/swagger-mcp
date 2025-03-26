@@ -6,9 +6,14 @@ set -e
 # Change to the project root directory
 cd "$(dirname "$0")/.."
 
-# Run the specified test file
-echo "Running test_tool_descriptions.py..."
+# Run the specified test files
+echo "Running fixed test suite..."
+
+echo "1. Running test_tool_descriptions.py..."
 python -m pytest swagger_mcp/tests/test_tool_descriptions.py -v
+
+echo "2. Running test_parameter_descriptions.py..."
+python -m pytest swagger_mcp/tests/test_parameter_descriptions.py -v
 
 # If we get here, all tests passed
 echo "✅ All tests passed!"

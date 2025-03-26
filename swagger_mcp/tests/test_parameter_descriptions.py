@@ -1,8 +1,8 @@
-from openapi_mcp_server import OpenAPIMCPServer
-import asyncio
+import pytest
 import json
-import tempfile
 import os
+from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
+from mcp.types import Tool
 
 # A sample OpenAPI spec with detailed descriptions
 detailed_spec = {
@@ -146,66 +146,86 @@ def format_tool_description(endpoint):
         
     return description
 
-async def test():
-    # Write the spec to a temporary file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.json', delete=False) as temp_file:
-        json.dump(detailed_spec, temp_file)
-        temp_file_path = temp_file.name
-    
-    try:
-        # Create the server with our detailed spec
-        server = OpenAPIMCPServer('Test Server', temp_file_path)
-        
-        # Extract the tools from the server's simple_endpoints
-        tools = []
-        
-        for operation_id, endpoint in server.simple_endpoints.items():
-            # Skip deprecated endpoints
-            if endpoint.deprecated:
-                continue
-            
-            # Create input schema from the endpoint's combined parameter schema
-            input_schema = {
-                "type": "object",
-                "properties": {},
-                "required": []
-            }
-            
-            if endpoint.combined_parameter_schema and 'properties' in endpoint.combined_parameter_schema:
-                input_schema["properties"] = endpoint.combined_parameter_schema['properties']
-                if 'required' in endpoint.combined_parameter_schema:
-                    input_schema["required"] = endpoint.combined_parameter_schema['required']
-            
-            # Create the tool definition using our helper function
-            description = format_tool_description(endpoint)
-            
-            from mcp.types import Tool
-            
-            tool = Tool(
-                name=operation_id,
-                description=description,
-                inputSchema=input_schema
-            )
-            tools.append(tool)
-        
-        # Print information about all the tools
-        print(f"Found {len(tools)} tools\n")
-        
-        for tool in tools:
-            print(f"Tool: {tool.name}")
-            print(f"Description: {tool.description}")
-            print("Schema properties:")
-            
-            for param_name, param_schema in tool.inputSchema.get('properties', {}).items():
-                desc = param_schema.get('description', 'No description')
-                required = "required" if param_name in tool.inputSchema.get('required', []) else "optional"
-                print(f"  - {param_name} ({required}): {desc}")
-            
-            print()
-    finally:
-        # Clean up the temporary file
-        if os.path.exists(temp_file_path):
-            os.unlink(temp_file_path)
+@pytest.fixture
+def spec_file(tmp_path):
+    """Create a temporary file with the detailed spec."""
+    spec_path = tmp_path / "detailed_spec.json"
+    with open(spec_path, 'w') as f:
+        json.dump(detailed_spec, f)
+    return str(spec_path)
 
-if __name__ == "__main__":
-    asyncio.run(test()) 
+@pytest.fixture
+def server(spec_file):
+    """Create an OpenAPIMCPServer instance with the detailed spec."""
+    return OpenAPIMCPServer('Test Server', spec_file)
+
+@pytest.fixture
+def tools(server):
+    """Extract tools from the server's endpoints."""
+    result = []
+    for operation_id, endpoint in server.simple_endpoints.items():
+        if endpoint.deprecated:
+            continue
+            
+        input_schema = {
+            "type": "object",
+            "properties": {},
+            "required": []
+        }
+        
+        if endpoint.combined_parameter_schema and 'properties' in endpoint.combined_parameter_schema:
+            input_schema["properties"] = endpoint.combined_parameter_schema['properties']
+            if 'required' in endpoint.combined_parameter_schema:
+                input_schema["required"] = endpoint.combined_parameter_schema['required']
+        
+        description = format_tool_description(endpoint)
+        
+        tool = Tool(
+            name=operation_id,
+            description=description,
+            inputSchema=input_schema
+        )
+        result.append(tool)
+    return result
+
+def test_tools_creation(tools):
+    """Test that tools are created successfully."""
+    assert len(tools) > 0, "No tools were created"
+    
+    # Test specific tools we expect to find
+    tool_names = {tool.name for tool in tools}
+    expected_tools = {'listUsers', 'createUser', 'getUser'}
+    assert expected_tools.issubset(tool_names), f"Missing expected tools. Found: {tool_names}"
+
+def test_tool_descriptions(tools):
+    """Test that tool descriptions are properly formatted."""
+    for tool in tools:
+        assert tool.description, f"Tool {tool.name} has no description"
+        if tool.name == 'listUsers':
+            assert "paginated list" in tool.description.lower(), "listUsers description should mention pagination"
+        elif tool.name == 'createUser':
+            assert "admin privileges" in tool.description.lower(), "createUser description should mention admin privileges"
+        elif tool.name == 'getUser':
+            assert "unique id" in tool.description.lower(), "getUser description should mention user ID"
+
+def test_tool_parameters(tools):
+    """Test that tool parameters have proper descriptions and constraints."""
+    for tool in tools:
+        assert tool.inputSchema, f"Tool {tool.name} has no input schema"
+        properties = tool.inputSchema.get('properties', {})
+        
+        if tool.name == 'listUsers':
+            assert 'limit' in properties, "listUsers should have a limit parameter"
+            assert 'offset' in properties, "listUsers should have an offset parameter"
+            assert properties['limit'].get('maximum') == 100, "limit should have a maximum of 100"
+            
+        elif tool.name == 'createUser':
+            assert 'name' in properties, "createUser should have a name parameter"
+            assert 'email' in properties, "createUser should have an email parameter"
+            assert 'name' in tool.inputSchema.get('required', []), "name should be required"
+            assert 'email' in tool.inputSchema.get('required', []), "email should be required"
+            
+        elif tool.name == 'getUser':
+            assert 'userId' in properties, "getUser should have a userId parameter"
+            assert 'userId' in tool.inputSchema.get('required', []), "userId should be required"
+            assert properties['userId'].get('format') == 'uuid', "userId should be a UUID format"
