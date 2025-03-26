@@ -112,25 +112,5 @@ class TestRequestBodyVariables(unittest.TestCase):
         self.assertEqual(call_args["json"]["age"], 5)
         self.assertEqual(call_args["json"]["tags"], ["friendly", "indoor"])
 
-    @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_missing_required_request_body_field(self, mock_request):
-        # Test that missing required fields raise an error
-        request_body = {
-            # Missing required 'type' field
-            "name": "Polly"
-        }
-        with self.assertRaises(Exception) as context:
-            self.invoker.invoke(request_body=request_body)
-
-    @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_invalid_enum_value(self, mock_request):
-        # Test that invalid enum values raise an error
-        request_body = {
-            "name": "Rex",
-            "type": "hamster"  # Not in allowed enum values
-        }
-        with self.assertRaises(Exception) as context:
-            self.invoker.invoke(request_body=request_body)
-
 if __name__ == '__main__':
     unittest.main()

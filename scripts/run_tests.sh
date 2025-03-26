@@ -30,7 +30,10 @@ python -m pytest swagger_mcp/tests/test_formdata_variables.py -v
 echo "7. Running test_request_body_variables.py..."
 python -m pytest swagger_mcp/tests/test_request_body_variables.py -v
 
-echo "8. Running test_mixed_endpoint_variables.py..."
+echo "8. Running test_query_parameter_variables.py..."
+python -m pytest swagger_mcp/tests/test_query_parameter_variables.py -v
+
+echo "9. Running test_mixed_endpoint_variables.py..."
 python -m pytest swagger_mcp/tests/test_mixed_endpoint_variables.py -v
 
 # If we get here, all tests passed

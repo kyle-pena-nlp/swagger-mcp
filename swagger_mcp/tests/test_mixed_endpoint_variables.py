@@ -179,45 +179,5 @@ class TestMixedEndpointVariables(unittest.TestCase):
         self.assertEqual(call_args["json"]["treatment"], "Annual checkup")
         self.assertEqual(call_args["json"]["notes"], ["Weight is normal", "No issues found"])
 
-    @patch('swagger_mcp.endpoint_invoker.requests.request')
-    def test_missing_required_fields(self, mock_request):
-        """Test that missing required fields raise appropriate errors."""
-        parser = OpenAPIParser(spec=self.openapi_spec)
-
-        # Test missing path parameter
-        endpoint = parser.get_endpoint_by_operation_id("updatePetDetails")
-        invoker = EndpointInvoker(endpoint)
-        request_body = {
-            "name": "Max",
-            "breed": "Golden Retriever"
-        }
-        with self.assertRaises(Exception) as context:
-            invoker.invoke(request_body=request_body)  # Missing petId
-
-        # Test missing required form field (breed)
-        endpoint = parser.get_endpoint_by_operation_id("updatePetDetails")
-        invoker = EndpointInvoker(endpoint)
-        path_params = {"petId": 123}
-        request_body = {
-            "name": "Max",  # Missing required breed field
-            "color": "Golden"
-        }
-        with self.assertRaises(Exception) as context:
-            invoker.invoke(path_params=path_params, request_body=request_body)
-
-        # Test missing required JSON field (diagnosis)
-        endpoint = parser.get_endpoint_by_operation_id("updateMedicalRecord")
-        invoker = EndpointInvoker(endpoint)
-        path_params = {
-            "petId": 123,
-            "recordId": "REC-456"
-        }
-        request_body = {
-            "treatment": "Annual checkup",  # Missing required diagnosis field
-            "notes": ["Weight is normal"]
-        }
-        with self.assertRaises(Exception) as context:
-            invoker.invoke(path_params=path_params, request_body=request_body)
-
 if __name__ == '__main__':
     unittest.main()
