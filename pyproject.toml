@@ -1,7 +1,7 @@
 [project]
-name = "weather"
+name = "swagger-mcp"
 version = "0.1.0"
-description = "A simple MCP weather server"
+description = "A Swagger/OpenAPI MCP implementation"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
@@ -14,4 +14,4 @@ requires = [ "hatchling",]
 build-backend = "hatchling.build"
 
 [project.scripts]
-weather = "weather:main"
+swagger-mcp = "swagger_mcp.server:main"

@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Any, Set
-from endpoint import Endpoint
+from swagger_mcp.endpoint import Endpoint
 
 
 @dataclass

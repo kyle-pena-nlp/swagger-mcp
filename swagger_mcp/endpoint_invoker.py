@@ -2,8 +2,8 @@ from logging.handlers import RotatingFileHandler
 import requests, json
 import logging
 from typing import Dict, List, Any, Optional, Union
-from endpoint import Endpoint
-from simple_endpoint import SimpleEndpoint, create_simple_endpoint
+from swagger_mcp.endpoint import Endpoint
+from swagger_mcp.simple_endpoint import SimpleEndpoint, create_simple_endpoint
 
 logging.basicConfig(level=logging.INFO, 
                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
