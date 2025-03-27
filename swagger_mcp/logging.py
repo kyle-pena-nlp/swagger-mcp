@@ -16,17 +16,48 @@ DEFAULT_LOG_DIR = 'logs'
 MAX_LOG_SIZE = 10 * 1024 * 1024  # 10MB
 BACKUP_COUNT = 5
 
+class NoOpLogger:
+    """A no-op logger that silently discards all logging calls."""
+    def __init__(self, name: str):
+        self.name = name
+
+    def setLevel(self, level: int) -> None:
+        pass
+
+    def debug(self, msg: str, *args, **kwargs) -> None:
+        pass
+
+    def info(self, msg: str, *args, **kwargs) -> None:
+        pass
+
+    def warning(self, msg: str, *args, **kwargs) -> None:
+        pass
+
+    def error(self, msg: str, *args, **kwargs) -> None:
+        pass
+
+    def critical(self, msg: str, *args, **kwargs) -> None:
+        pass
+
+    def exception(self, msg: str, *args, **kwargs) -> None:
+        pass
+
 def setup_logger(name: str, log_level: int = DEFAULT_LOG_LEVEL) -> logging.Logger:
     """
-    Set up and return a logger instance with both console and file handlers.
+    Set up and return a logger instance. Returns a no-op logger unless REAL_LOGGER
+    environment variable is set to 'true'.
     
     Args:
         name: The name of the logger, typically __name__ from the calling module
         log_level: The logging level to use (default: INFO)
     
     Returns:
-        logging.Logger: Configured logger instance
+        logging.Logger: Configured logger instance, or NoOpLogger if REAL_LOGGER != 'true'
     """
+    # Return no-op logger unless REAL_LOGGER is set to 'true'
+    if os.getenv('REAL_LOGGER', '').lower() != 'true':
+        return NoOpLogger(name)
+
     logger = logging.getLogger(name)
     
     # Only configure the logger if it hasn't been configured before
@@ -55,6 +86,7 @@ def setup_logger(name: str, log_level: int = DEFAULT_LOG_LEVEL) -> logging.Logge
             file_handler.setFormatter(formatter)
             logger.addHandler(file_handler)
         except Exception as e:
+            # Use console handler to report file handler setup failure
             logger.warning(f"Failed to set up file logging: {e}")
     
     return logger
