@@ -155,8 +155,8 @@ swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --addit
 ## Other Fun Servers You Can Try:
 
 ```bash
-# Petstore 
-swagger-mcp --spec https://petstore.swagger.io/v2/swagger.json --name petstore-mcp --server-url https://petstore.swagger.io/v2 --cursor
+# Countries API
+swagger-mcp --spec https://restcountries.com/openapi/rest-countries-3.1.yml --name countries --server-url https://restcountries.com/ --const fields:name --cursor
 ```
 
 ## For Developers
