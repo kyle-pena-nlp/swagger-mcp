@@ -29,6 +29,7 @@ class OpenAPIParser:
         
         Args:
             spec: Either a file path to the OpenAPI spec (JSON or YAML),
+                  a URL to fetch the spec from (http/https),
                   a JSON string, or a dictionary containing the spec
         """
         self.spec = self._load_spec(spec)
@@ -49,48 +50,57 @@ class OpenAPIParser:
 
     def _load_spec(self, spec: Union[str, dict]) -> dict:
         """
-        Load the OpenAPI specification from various input formats.
+        Load an OpenAPI specification from various sources.
         
         Args:
-            spec: File path, JSON string, or dictionary
-            
+            spec: Either a file path to the OpenAPI spec (JSON or YAML),
+                  a URL to fetch the spec from (http/https),
+                  a JSON string, or a dictionary containing the spec
+                  
         Returns:
-            Dictionary containing the parsed OpenAPI spec
+            dict: The loaded OpenAPI specification
         """
         if isinstance(spec, dict):
             return spec
-        
-        if isinstance(spec, str):
-            # Check if it looks like a file path
-            if os.path.exists(spec) and (spec.endswith('.json') or spec.endswith('.yaml') or spec.endswith('.yml') or len(spec) < 256):
-                try:
-                    with open(spec, 'r') as f:
-                        content = f.read()
-                        if spec.endswith('.json'):
-                            return json.loads(content)
-                        elif spec.endswith(('.yaml', '.yml')):
-                            return yaml.safe_load(content)
-                        else:
-                            # Try JSON first for files without extension
-                            try:
-                                return json.loads(content)
-                            except json.JSONDecodeError:
-                                return yaml.safe_load(content)
-                except (FileNotFoundError, json.JSONDecodeError, yaml.YAMLError, OSError) as e:
-                    # If file loading fails, fall through to string parsing
-                    pass
             
-            # Try to parse as JSON string
+        if isinstance(spec, str):
+            # Check if it's a URL
+            if spec.startswith(('http://', 'https://')):
+                logger.info(f"Fetching OpenAPI spec from URL: {spec}")
+                response = requests.get(spec)
+                response.raise_for_status()  # Raise exception for non-200 status codes
+                
+                # Parse content based on content type
+                content_type = response.headers.get('Content-Type', '')
+                if 'json' in content_type:
+                    return response.json()
+                else:
+                    # Assume YAML or try to parse as such
+                    return yaml.safe_load(response.text)
+                    
+            # Check if it's a file path
+            if os.path.isfile(spec):
+                with open(spec, 'r') as f:
+                    content = f.read()
+                    try:
+                        if spec.lower().endswith('.json'):
+                            return json.loads(content)
+                        else:
+                            return yaml.safe_load(content)
+                    except Exception as e:
+                        raise ValueError(f"Failed to parse spec file {spec}: {str(e)}")
+                        
+            # Try parsing as JSON string
             try:
                 return json.loads(spec)
             except json.JSONDecodeError:
-                # Try to parse as YAML string
+                # Try parsing as YAML string
                 try:
                     return yaml.safe_load(spec)
-                except yaml.YAMLError:
-                    raise ValueError("Could not parse the specification as file path, JSON, or YAML")
-        
-        raise ValueError("Specification must be a file path, JSON string, or dictionary")
+                except yaml.YAMLError as e:
+                    raise ValueError(f"Failed to parse spec as JSON or YAML string: {str(e)}")
+                    
+        raise ValueError("Spec must be a file path, URL, JSON/YAML string, or dictionary")
     
     def _parse_security_schemes(self) -> Dict[str, Dict[str, Any]]:
         """

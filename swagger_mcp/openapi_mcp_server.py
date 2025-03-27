@@ -33,7 +33,7 @@ class OpenAPIMCPServer:
     def __init__(
         self, 
         server_name: str, 
-        openapi_spec: Union[str, Dict[str, Any]],  # Changed parameter name from openapi_spec_path to openapi_spec
+        openapi_spec: Union[str, Dict[str, Any]],  
         server_url: Optional[str] = None,
         bearer_token: Optional[str] = None,
         server_version: Optional[str] = "1.0.0",
@@ -61,7 +61,7 @@ class OpenAPIMCPServer:
             const_values: Optional dictionary of parameter names and their constant values
         """
         self.server_name = server_name
-        self.server_version = server_version or "1.0.0"  # Ensure server_version is not None
+        self.server_version = server_version or "1.0.0"  
         self.server_url = server_url
         self.bearer_token = bearer_token
         self.additional_headers = additional_headers or {}
@@ -78,28 +78,7 @@ class OpenAPIMCPServer:
         
         # Load and parse the OpenAPI spec
         try:
-            # Check if the spec is a URL
-            if isinstance(openapi_spec, str) and openapi_spec.startswith(('http://', 'https://')):
-                logger.info(f"Fetching OpenAPI spec from URL: {openapi_spec}")
-                response = requests.get(openapi_spec)
-                response.raise_for_status()  # Raise exception for non-200 status codes
-                
-                # Parse content based on content type
-                content_type = response.headers.get('Content-Type', '')
-                if 'json' in content_type:
-                    spec_content = response.json()
-                else:
-                    # Assume YAML or try to parse as such
-                    spec_content = response.text
-                
-                self.openapi_parser = OpenAPIParser(spec_content)
-            elif isinstance(openapi_spec, dict):
-                # Treat as dictionary
-                self.openapi_parser = OpenAPIParser(openapi_spec)
-            else:
-                # Treat as file path
-                self.openapi_parser = OpenAPIParser(openapi_spec)
-                
+            self.openapi_parser = OpenAPIParser(openapi_spec)
             logger.info(f"Loaded OpenAPI spec with {len(self.openapi_parser.endpoints)} endpoints")
         except Exception as e:
             logger.error(f"Failed to load OpenAPI spec: {e}")
@@ -262,7 +241,7 @@ class OpenAPIMCPServer:
 
 # Helper function to run the server
 def run_server(
-    openapi_spec: str,  # Changed parameter name from openapi_spec_path to openapi_spec
+    openapi_spec: str,  
     server_name: str = "OpenAPI-MCP-Server",
     server_url: Optional[str] = None,
     bearer_token: Optional[str] = None,

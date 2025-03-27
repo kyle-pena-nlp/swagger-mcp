@@ -408,3 +408,10 @@ def test_multiple_security_schemes(secure_parser):
     # POST /pets has both bearer and API key as alternatives
     create_pets = secure_parser.get_endpoint_by_operation_id('createPets')
     assert create_pets.requires_bearer_auth
+
+def test_parse_countries_spec():
+    """Test parsing the countries.yaml OpenAPI specification."""
+    countries_yaml_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'countries.yaml')
+    parser = OpenAPIParser(countries_yaml_path)
+    # If we get here without exceptions, the test passes
+    assert True

@@ -1,6 +1,6 @@
 # Swagger MCP
 
-Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, or other tools.
+Automatically convert a Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, or other tools.
 
 ## Quickstart
 
