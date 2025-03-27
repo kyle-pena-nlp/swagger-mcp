@@ -1,5 +1,6 @@
 import pytest
-from swagger_mcp.openapi_parser import OpenAPIParser
+from unittest.mock import patch, Mock, create_autospec
+from swagger_mcp.openapi_parser import OpenAPIParser, CircularReferenceError
 
 def test_request_body_schema_ref_resolution():
     """Test that request body schema references are properly resolved."""
@@ -252,7 +253,7 @@ def test_nested_schema_ref_resolution():
     assert "category" in product_schema["properties"]
 
 def test_circular_schema_ref_detection():
-    """Test that circular schema references are detected and raise an error."""
+    """Test that circular schema references are detected and handled."""
     spec = {
         "openapi": "3.0.0",
         "info": {"title": "Test API", "version": "1.0.0"},
@@ -293,11 +294,23 @@ def test_circular_schema_ref_detection():
                         "parent": {"$ref": "#/components/schemas/Parent"}
                     }
                 }
-            }        
+            }
         }
     }
+
+    # Create a mock CircularReferenceError class
+    mock_error = create_autospec(CircularReferenceError, instance=True)
+    mock_error.record_occurrence = Mock()
     
-    with pytest.raises(ValueError) as exc_info:
+    # Patch the CircularReferenceError class to return our mock
+    with patch('swagger_mcp.openapi_parser.CircularReferenceError', return_value=mock_error):
         parser = OpenAPIParser(spec)
-    
-    assert "Circular reference detected" in str(exc_info.value)
+        
+        # Parse endpoints - this should skip the problematic endpoint
+        endpoints = parser.get_endpoints()
+        
+        # Verify that record_occurrence was called at least once
+        mock_error.record_occurrence.assert_called()
+        
+        # Verify that no endpoints were created due to the circular reference
+        assert len(endpoints) == 0

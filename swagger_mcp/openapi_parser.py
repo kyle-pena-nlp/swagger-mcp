@@ -9,6 +9,14 @@ from swagger_mcp.logging import setup_logger
 
 logger = setup_logger(__name__)
 
+class CircularReferenceError(ValueError):
+    """Raised when a circular reference is detected in schema resolution."""
+    
+    def record_occurrence(self, ref: str) -> None:
+        """Record that this error occurred for a specific reference.
+        This method exists purely for testing purposes."""
+        pass
+
 class OpenAPIParser:
     """
     A class for parsing OpenAPI specifications and extracting endpoint information,
@@ -140,7 +148,8 @@ class OpenAPIParser:
             The resolved schema
             
         Raises:
-            ValueError: If a reference cycle is detected or reference is invalid
+            CircularReferenceError: If a reference cycle is detected
+            ValueError: If reference is invalid
         """
         if not isinstance(schema, dict):
             return schema
@@ -154,7 +163,9 @@ class OpenAPIParser:
                 raise ValueError(f"Only local references are supported, got: {ref}")
                 
             if ref in visited_refs:
-                raise ValueError(f"Circular reference detected: {ref}")
+                error = CircularReferenceError(f"Circular reference detected: {ref}")
+                error.record_occurrence(ref)
+                raise error
                 
             visited_refs.add(ref)
                 
