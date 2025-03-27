@@ -305,7 +305,7 @@ def main():
             exclude_pattern=args.exclude_pattern,
             cursor_mode=args.cursor,
             const_values=const_values
-        ) 
+        )
     except Exception as e:
         logger.error(f"Server failed to start: {str(e)}", exc_info=True)
         raise

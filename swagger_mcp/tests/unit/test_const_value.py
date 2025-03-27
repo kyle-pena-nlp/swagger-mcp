@@ -1,4 +1,5 @@
 import pytest
+import os
 from unittest.mock import patch, MagicMock
 from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
 
@@ -70,6 +71,19 @@ class TestConstValues:
         )
         return server
 
+    @pytest.fixture
+    def countries_server(self):
+        """Fixture that creates a server using the countries.yaml spec with const fields parameter."""
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        spec_path = os.path.join(current_dir, 'fixtures', 'countries.yaml')
+        
+        server = OpenAPIMCPServer(
+            'Countries Server',
+            spec_path,
+            const_values={"fields": "name"}
+        )
+        return server
+
     @pytest.mark.asyncio
     async def test_const_parameter_handling(self, server):
         """Test that const parameters are handled correctly in tool definitions."""
@@ -114,3 +128,17 @@ class TestConstValues:
             assert call_args["params"]["const_param"] == "fixed_value"
             assert call_args["params"]["required_param"] == "test"
             assert call_args["params"]["other_param"] == "value"
+
+    @pytest.mark.asyncio
+    async def test_countries_const_fields(self, countries_server):
+        """Test that const fields parameter is handled correctly in countries API tools."""
+        handlers = countries_server._register_handlers()
+        list_tools = handlers["list_tools"]
+        tools = await list_tools()
+        
+        # Check each tool to ensure 'fields' parameter is not included
+        for tool in tools:
+            tool_params = tool.inputSchema["properties"]
+            assert "fields" not in tool_params, f"Tool {tool.name} should not have 'fields' parameter"
+            if "required" in tool.inputSchema:
+                assert "fields" not in tool.inputSchema["required"], f"Tool {tool.name} should not require 'fields' parameter"

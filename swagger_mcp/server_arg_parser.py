@@ -13,7 +13,7 @@ def parse_args(description):
     parser.add_argument("--include-pattern", help="Regex pattern to include only specific endpoint paths (e.g., '/api/v1/.*')")
     parser.add_argument("--exclude-pattern", help="Regex pattern to exclude specific endpoint paths (e.g., '/internal/.*')")
     parser.add_argument("--cursor", action='store_true', help="Run the server in Cursor mode to deal with Cursor quirks")
-    parser.add_argument("--const-values", help="Optional dictionary of parameter names and their constant values (in JSON format)")
+    parser.add_argument("--const", action='append', help="Optional dictionary of parameter names and their constant values (in JSON format)")
     
     args = parser.parse_args()
     
@@ -29,14 +29,18 @@ def parse_args(description):
     
     # Process const values into a dictionary if provided
     const_values = {}
-    if args.const_values:
-        for const_value in args.const_values:
+    if args.const:
+        for const_value in args.const:
             try:
                 key, value = const_value.split(':', 1)
                 const_values[key.strip()] = value.strip()
             except ValueError:
                 logger.warning(f"Ignoring invalid const value format: {const_value}. Const values should be in 'key:value' format.")
-    
+
+    logger.info(f"Parsed arguments: {args}")
+    logger.info(f"Additional headers: {additional_headers}")
+    logger.info(f"Const values: {const_values}")
+
     return args, additional_headers, const_values
 
     

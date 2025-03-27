@@ -53,6 +53,8 @@ def main():
         print(f"  Parameters: {json.dumps(tool.inputSchema, indent=2)}")
         print("\n")
 
+    print(const_values)
+
 
 if __name__ == "__main__":
     main()
