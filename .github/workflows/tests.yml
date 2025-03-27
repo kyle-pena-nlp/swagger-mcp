@@ -28,7 +28,7 @@ jobs:
         
     - name: Run unit tests
       run: |
-        pytest swagger_mcp/tests/unit/ -v
+        pytest swagger_mcp/tests/ -v --ignore=swagger_mcp/tests/integration/ --ignore=swagger_mcp/tests/archive/
         
     - name: Run integration tests
       run: |
