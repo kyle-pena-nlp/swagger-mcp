@@ -250,3 +250,54 @@ def test_nested_schema_ref_resolution():
     
     product_schema = items_schema["items"]["properties"]["product"]
     assert "category" in product_schema["properties"]
+
+def test_circular_schema_ref_detection():
+    """Test that circular schema references are detected and raise an error."""
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Test API", "version": "1.0.0"},
+        "paths": {
+            "/test": {
+                "post": {
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/Parent"
+                                }
+                            }
+                        }
+                    },
+                    "responses": {
+                        "200": {
+                            "description": "Success"
+                        }
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "Parent": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "child": {"$ref": "#/components/schemas/Child"}
+                    }
+                },
+                "Child": {
+                    "type": "object",
+                    "properties": {
+                        "id": {"type": "string"},
+                        "parent": {"$ref": "#/components/schemas/Parent"}
+                    }
+                }
+            }        
+        }
+    }
+    
+    with pytest.raises(ValueError) as exc_info:
+        parser = OpenAPIParser(spec)
+    
+    assert "Circular reference detected" in str(exc_info.value)

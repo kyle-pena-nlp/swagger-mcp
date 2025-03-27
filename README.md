@@ -33,15 +33,30 @@ Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the sa
 
 We'll use this sample server to show how to configure an MCP server in Cursor or Windsurf.
 
-### Cursor
-Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
-```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --cursor
+### Cursor (>=v0.46)
+
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "Product MCP",
+        "--server-url",
+        "http://localhost:9000",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
-**Please Note**: *In Cursor, you may need to replace `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
+**Please Note**: *In Cursor, you may need to replace the command `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
 
-Also note the `--cursor` flag.
+Also note the `--cursor` flag. This is for Cursor compatibility.
 
 ### Windsurf
 Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
@@ -69,6 +84,8 @@ Ask your AI agent to list, create, update, and delete products and categories.
 
 ![Demo](images/furniture.gif)
 
+See other examples in [Other Fun Servers](#other-fun-servers).
+
 ## Additional Options
 
 1. You can pass a JSON file, YAML file, or URL for the `--spec` option:
@@ -77,23 +94,93 @@ Ask your AI agent to list, create, update, and delete products and categories.
     * https://api.example.com/openapi.json
 
 2. Filter endpoints: Only include endpoints where the path matches the regex pattern:
-```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --include-pattern category --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--include-pattern",
+        "category",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
 3. Filter endpoints: Exclude endpoints where the path matches the regex pattern:
-```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --exclude-pattern product --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--exclude-pattern",
+        "product",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
 4. Authentication
-```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --bearer-token your-token-here --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--bearer-token",
+        "your-token-here",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
 5. Custom headers
-```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --header X-Some-Header:your-value --header X-Some-Other-Header:your-value --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--header",
+        "X-Some-Header:your-value",
+        "--header",
+        "X-Some-Other-Header:your-value",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
 6. Server URLs
@@ -103,9 +190,27 @@ If the OpenAPI spec already contains a specific server URL, you don't have to pr
 
 If you want to always automatically provide a value for a parameter, you can use the `--const` option.
 You can include as many `--const` options as you need.
-
-```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --const parameter-name:your-value --const parameter-name2:your-value2 --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--const",
+        "parameter-name:your-value",
+        "--const",
+        "parameter-name2:your-value2",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
 ## Supported Features
@@ -116,16 +221,18 @@ swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --serve
 - JSON Request body
 - Bearer Token Authentication
 - Custom Headers
+- Constant Values
 
 ## Limitations
 
-- Cursor MCP integration is very early and limited.  It does not like double quotes in the command line arguments.  You probably still have to fully path to the command (`which swagger-mcp` to get the path).
-- If you find a Swagger API specification that is not supported and you can't do a workaround with any of the available parameters, please file an issue. We will add support for it as needed / requested.
-- We will not support automatic OAuth workflow execution.  If the OAuth workflow ends in a bearer token, you must provide this bearer token as a command line argument.
-- We do not support Swagger/OpenAPI specifications spread across multiple files (i.e.; fragments, extensions, etc.).
-- We do not support path variable substitution in the base server URLs (but we *do* support path variable in the endpoint paths).
-- In general, we do not support all Swagger/OpenAPI features.  The Swagger/OpenAPI standard is vast, and support for more obscure features will be added as needed / requested.
+- Cursor MCP integration is very early and frankly broken.  (It does not like double quotes in the command line arguments.  It does not like dashes in tool names.  Sometimes, parameter descriptions cause silent errors).  I try to address some of these with cursor mode `--cursor`, but it's still not great.  Until Cursor MCP support gets better, you'll be happier with Windsurf.
+- Endpoints that have recursive schema references are not yet supported.
 - When Cursor re-implements support for MCP resources, you will have the option to specify some endpoints as resources instead of tools.
+- If you find a Swagger API specification that is not supported and you can't use any of the available parameters for a workaround, please file an issue. We will add support for it as needed / requested.
+- We will not support automatic OAuth workflow execution.  If the OAuth workflow creates a bearer token, you must obtain this token yourself by performing OAuth out-of-band, and provide this bearer token as a command line argument.
+- We do not support Swagger/OpenAPI specifications spread across multiple files (i.e.; fragments, extensions, etc.).
+- We do not support path variable substitution in server URLs (but we *do* support path variables in endpoints).
+- In general, we do not support all Swagger/OpenAPI features.  The Swagger/OpenAPI standard is vast, and support for more obscure features will be added as needed / requested.
 
 ## Command Line Options
 
@@ -136,28 +243,102 @@ swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --serve
 - `--additional-headers`: JSON string of additional headers to include in all requests
 - `--include-pattern`: Regex pattern to include only specific endpoint paths (e.g., "/api/v1/.*")
 - `--exclude-pattern`: Regex pattern to exclude specific endpoint paths (e.g., "/internal/.*")
-- `--header`: key:value pair of an extra header to include with all requests. Can be included multiple times.
-- `--const`: key:value pair of a constant value to always use for a parameter, if the parameter is present on the endpoint (can be a path variable, query parameter, top-level request body property, or multi-part form data field). Can be included multiple times to specify multiple const values.
+- `--header`: key:value pair of an extra header to include with all requests. Can be included multiple times to specify multiple headers.
+- `--const`: key:value pair of a constant value to always use for a parameter, if the parameter is present on the endpoint (can be a path variable, query parameter, top-level request body property, or multi-part non-file form data field). Can be included multiple times to specify multiple const values.
 - `--cursor`: Run in cursor mode
 
 ## Authentication
 
 For APIs requiring authentication:
-
-```bash
-# Using bearer token
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --bearer-token "your-token-here" --cursor
-
-# Using custom headers
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --additional-headers '{"X-API-Key": "your-key"}' --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--bearer-token",
+        "your-token-here",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
 
-## Other Fun Servers You Can Try:
-
-```bash
-# Countries API
-swagger-mcp --spec https://restcountries.com/openapi/rest-countries-3.1.yml --name countries --server-url https://restcountries.com/ --const fields:name --cursor
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "product-mcp",
+        "--server-url",
+        "http://localhost:9000",
+        "--header",
+        "X-API-Key:your-key",
+        "--cursor"
+      ]
+    }
+  }
+}
 ```
+
+## Other Fun Servers
+
+### Countries
+
+```json
+{
+  "mcpServers": {
+    "countries": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "https://restcountries.com/openapi/rest-countries-3.1.yml",
+        "--name",
+        "countries",
+        "--server-url",
+        "https://restcountries.com/",
+        "--const",
+        "fields:name",
+        "--cursor"
+      ]
+    }
+  }
+}
+```
+
+## PokeAPI
+
+```json
+{
+  "mcpServers": {
+    "pokeapi": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "https://raw.githubusercontent.com/PokeAPI/pokeapi/refs/heads/master/openapi.yml",
+        "--name",
+        "pokeapi",
+        "--filter-include",
+        "pokemon",
+        "--cursor"
+      ]
+    }
+  }
+}
+```
+
+
 
 ## For Developers
 

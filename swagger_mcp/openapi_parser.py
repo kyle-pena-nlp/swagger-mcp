@@ -3,7 +3,7 @@ import json
 import requests
 import yaml
 
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Set
 from swagger_mcp.endpoint import Endpoint
 from swagger_mcp.logging import setup_logger
 
@@ -128,23 +128,35 @@ class OpenAPIParser:
             
         return False
     
-    def _resolve_schema_ref(self, schema: Dict[str, Any]) -> Dict[str, Any]:
+    def _resolve_schema_ref(self, schema: Dict[str, Any], visited_refs: Optional[Set[str]] = None) -> Dict[str, Any]:
         """
         Resolve a schema reference to its actual schema definition.
         
         Args:
             schema: The schema that may contain a $ref
+            visited_refs: Set of already visited references to detect cycles
             
         Returns:
             The resolved schema
+            
+        Raises:
+            ValueError: If a reference cycle is detected or reference is invalid
         """
         if not isinstance(schema, dict):
             return schema
+            
+        if visited_refs is None:
+            visited_refs = set()
             
         if '$ref' in schema:
             ref = schema['$ref']
             if not ref.startswith('#/'):
                 raise ValueError(f"Only local references are supported, got: {ref}")
+                
+            if ref in visited_refs:
+                raise ValueError(f"Circular reference detected: {ref}")
+                
+            visited_refs.add(ref)
                 
             # Split the reference path and traverse the spec
             parts = ref.lstrip('#/').split('/')
@@ -155,16 +167,16 @@ class OpenAPIParser:
                 current = current[part]
             
             # Recursively resolve any nested references
-            return self._resolve_schema_ref(current)
+            return self._resolve_schema_ref(current, visited_refs)
         
         # Recursively resolve references in nested objects
         resolved = {}
         for key, value in schema.items():
             if isinstance(value, dict):
-                resolved[key] = self._resolve_schema_ref(value)
+                resolved[key] = self._resolve_schema_ref(value, visited_refs.copy())
             elif isinstance(value, list):
                 resolved[key] = [
-                    self._resolve_schema_ref(item) if isinstance(item, dict) else item
+                    self._resolve_schema_ref(item, visited_refs.copy()) if isinstance(item, dict) else item
                     for item in value
                 ]
             else:
@@ -252,6 +264,53 @@ class OpenAPIParser:
                 
         return False
 
+    def _build_parameters_schema(self, parameters: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Build a JSON Schema object from a list of parameters.
+        
+        Args:
+            parameters: List of parameter objects from the OpenAPI spec
+            
+        Returns:
+            A JSON Schema object representing the parameters
+        """
+        schema = {
+            'type': 'object',
+            'properties': {},
+            'required': []
+        }
+        
+        for param in parameters:
+            param_name = param.get('name', '')
+            param_schema = param.get('schema', {}).copy()
+            
+            # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
+            if not param_schema and 'type' in param:
+                param_schema = {
+                    'type': param.get('type'),
+                    'description': param.get('description', '')
+                }
+                # Copy over other schema-related fields
+                for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
+                    if field in param:
+                        param_schema[field] = param[field]
+            
+            # Add description from parameter to schema if present
+            if 'description' in param:
+                param_schema['description'] = param.get('description')
+            
+            schema['properties'][param_name] = param_schema
+            
+            # Path parameters are required by default in OpenAPI
+            if param.get('in') == 'path' or param.get('required', False):
+                schema['required'].append(param_name)
+        
+        # Only add required array if there are required parameters
+        if not schema['required']:
+            del schema['required']
+        
+        return schema
+
     def _parse_endpoints(self) -> Dict[str, Endpoint]:
         """
         Parse the OpenAPI specification to extract endpoints information.
@@ -259,272 +318,156 @@ class OpenAPIParser:
         Returns:
             A dictionary mapping endpoint keys (method + path) to Endpoint objects
         """
-        result: Dict[str, Endpoint] = {}
-        
-        # Get the paths from the OpenAPI spec
+        logger.info("Parsing OpenAPI specification endpoints")
+        endpoints = {}
         paths = self.spec.get('paths', {})
         
         for path, path_item in paths.items():
+            # Skip path parameters for now, we'll merge them with operation parameters
+            path_parameters = path_item.get('parameters', [])
+            
             for method, operation in path_item.items():
-                # Skip non-HTTP methods (like parameters, servers, etc.)
-                if method not in ['get', 'post', 'put', 'delete', 'patch', 'head', 'options', 'trace']:
+                # Skip non-operation fields like parameters, summary, etc.
+                if method in ['parameters', 'summary', 'description', 'servers']:
                     continue
-                
-                # Create a new endpoint with the basic information
-                endpoint = Endpoint(
-                    path=path,
-                    method=method.upper(),
-                    operation_id=operation.get('operationId', ''),
-                    summary=operation.get('summary', ''),
-                    description=operation.get('description', ''),
-                    deprecated=operation.get('deprecated', False),
-                    requires_bearer_auth=False,  # Default value
-                    requires_oauth=False,  # Default value
-                    servers=operation.get('servers', self.servers.copy()),
-                    tags=operation.get('tags', [])
-                )
-                
-                # Check if this operation requires bearer authorization or OAuth
-                # First check operation-level security, if present
-                operation_security = operation.get('security')
-                if operation_security is not None:
-                    endpoint.security_requirements = operation_security
-                    endpoint.requires_bearer_auth = self._requires_bearer_auth(operation_security)
-                    endpoint.requires_oauth = self._requires_oauth(operation_security)
-                    if endpoint.requires_oauth:
-                        endpoint.oauth_scopes = self._get_oauth_scopes(operation_security)
-                elif self.global_security:
-                    # Fall back to global security if no operation-level security is defined
-                    endpoint.security_requirements = self.global_security
-                    endpoint.requires_bearer_auth = self._requires_bearer_auth(self.global_security)
-                    endpoint.requires_oauth = self._requires_oauth(self.global_security)
-                    if endpoint.requires_oauth:
-                        endpoint.oauth_scopes = self._get_oauth_scopes(self.global_security)
-                
-                # Extract request body schema if present
-                request_body = operation.get('requestBody', {})
-                if request_body:
-                    endpoint.request_body_required = request_body.get('required', False)
-                    content = request_body.get('content', {})
                     
-                    # Look for application/json content type first
-                    json_content = content.get('application/json', {})
-                    if json_content and 'schema' in json_content:
-                        endpoint.request_body_schema = self._resolve_schema_ref(json_content['schema'])
-                        endpoint.request_content_types.append('application/json')
-                    else:
-                        # If no JSON content type, use the first available content type
-                        for content_type, content_info in content.items():
-                            if 'schema' in content_info:
-                                endpoint.request_body_schema = self._resolve_schema_ref(content_info['schema'])
-                                endpoint.request_content_types.append(content_type)
-                                break
-                
-                # Extract parameters (both from operation and path item levels)
-                parameters = []
-                
-                # Add path-level parameters if present
-                if 'parameters' in path_item:
-                    parameters.extend(path_item['parameters'])
-                
-                # Add operation-level parameters if present (these override path parameters with the same name and location)
-                if 'parameters' in operation:
-                    operation_param_names = {(p.get('name', ''), p.get('in', '')) for p in operation.get('parameters', [])}
-                    # Only keep path-level parameters that aren't overridden
-                    parameters = [p for p in parameters if (p.get('name', ''), p.get('in', '')) not in operation_param_names]
-                    parameters.extend(operation.get('parameters', []))
-                
-                # Process parameters into query, path, header, and form schemas
-                query_params = [p for p in parameters if p.get('in') == 'query']
-                path_params = [p for p in parameters if p.get('in') == 'path']
-                header_params = [p for p in parameters if p.get('in') == 'header']
-                form_params = [p for p in parameters if p.get('in') == 'formData']
-                
-                # Create query parameters schema
-                if query_params:
-                    query_schema = {
-                        'type': 'object',
-                        'properties': {},
-                        'required': []
-                    }
+                try:
+                    endpoint = Endpoint(
+                        path=path,
+                        method=method.upper(),
+                        operation_id=operation.get('operationId', ''),
+                        summary=operation.get('summary', ''),
+                        description=operation.get('description', ''),
+                        deprecated=operation.get('deprecated', False),
+                        servers=operation.get('servers', self.servers),
+                        tags=operation.get('tags', [])
+                    )
                     
-                    for param in query_params:
-                        param_name = param.get('name', '')
-                        param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
+                    # Handle operation-level security, falling back to global security
+                    operation_security = operation.get('security')
+                    if operation_security is not None:
+                        endpoint.security_requirements = operation_security
+                        endpoint.requires_bearer_auth = self._requires_bearer_auth(operation_security)
+                        endpoint.requires_oauth = self._requires_oauth(operation_security)
+                        if endpoint.requires_oauth:
+                            endpoint.oauth_scopes = self._get_oauth_scopes(operation_security)
+                    elif self.global_security:
+                        # Fall back to global security if no operation-level security is defined
+                        endpoint.security_requirements = self.global_security
+                        endpoint.requires_bearer_auth = self._requires_bearer_auth(self.global_security)
+                        endpoint.requires_oauth = self._requires_oauth(self.global_security)
+                        if endpoint.requires_oauth:
+                            endpoint.oauth_scopes = self._get_oauth_scopes(self.global_security)
+                    
+                    # Extract request body schema if present
+                    request_body = operation.get('requestBody', {})
+                    if request_body:
+                        try:
+                            endpoint.request_body_required = request_body.get('required', False)
+                            content = request_body.get('content', {})
+                            
+                            # Look for application/json content type first
+                            json_content = content.get('application/json', {})
+                            if json_content and 'schema' in json_content:
+                                endpoint.request_body_schema = self._resolve_schema_ref(json_content['schema'])
+                                endpoint.request_content_types.append('application/json')
+                            else:
+                                # If no JSON content type, use the first available content type
+                                for content_type, content_info in content.items():
+                                    if 'schema' in content_info:
+                                        endpoint.request_body_schema = self._resolve_schema_ref(content_info['schema'])
+                                        endpoint.request_content_types.append(content_type)
+                                        break
+                        except ValueError as e:
+                            logger.warning(f"Skipping request body schema for {method.upper()} {path}: {str(e)}")
+                    
+                    # Extract parameters (both from operation and path item levels)
+                    try:
+                        parameters = []
                         
-                        # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
-                        if not param_schema and 'type' in param:
-                            param_schema = {
-                                'type': param.get('type'),
-                                'description': param.get('description', '')
-                            }
-                            # Copy over other schema-related fields
-                            for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
-                                if field in param:
-                                    param_schema[field] = param[field]
-                        else:
-                            # Resolve any schema references
-                            param_schema = self._resolve_schema_ref(param_schema)
-                            # Add description from parameter to schema if present
-                            if 'description' in param:
-                                param_schema['description'] = param.get('description')
+                        # Add path-level parameters if present
+                        if path_parameters:
+                            parameters.extend(path_parameters)
                         
-                        query_schema['properties'][param_name] = param_schema
+                        # Add operation-level parameters
+                        if 'parameters' in operation:
+                            parameters.extend(operation['parameters'])
                         
-                        if param.get('required', False):
-                            query_schema['required'].append(param_name)
-                    
-                    # Only add required array if there are required parameters
-                    if not query_schema['required']:
-                        del query_schema['required']
-                    
-                    endpoint.query_parameters_schema = query_schema
-                
-                # Create path parameters schema
-                if path_params:
-                    path_schema = {
-                        'type': 'object',
-                        'properties': {},
-                        'required': []
-                    }
-                    
-                    for param in path_params:
-                        param_name = param.get('name', '')
-                        param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
+                        # Process parameters by type
+                        path_params = []
+                        query_params = []
+                        header_params = []
+                        form_params = []
                         
-                        # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
-                        if not param_schema and 'type' in param:
-                            param_schema = {
-                                'type': param.get('type'),
-                                'description': param.get('description', '')
-                            }
-                            # Copy over other schema-related fields
-                            for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
-                                if field in param:
-                                    param_schema[field] = param[field]
-                        else:
-                            # Resolve any schema references
-                            param_schema = self._resolve_schema_ref(param_schema)
-                            # Add description from parameter to schema if present
-                            if 'description' in param:
-                                param_schema['description'] = param.get('description')
+                        for param in parameters:
+                            # Resolve parameter schema if it's a reference
+                            if isinstance(param, dict) and '$ref' in param:
+                                param = self._resolve_schema_ref(param)
+                            
+                            param_schema = param.get('schema', {})
+                            if isinstance(param_schema, dict) and '$ref' in param_schema:
+                                try:
+                                    param['schema'] = self._resolve_schema_ref(param_schema)
+                                except ValueError as e:
+                                    logger.warning(f"Skipping parameter schema for {param.get('name', 'unknown')} in {method.upper()} {path}: {str(e)}")
+                                    continue
+                            
+                            param_in = param.get('in')
+                            if param_in == 'path':
+                                path_params.append(param)
+                            elif param_in == 'query':
+                                query_params.append(param)
+                            elif param_in == 'header':
+                                header_params.append(param)
+                            elif param_in == 'formData':
+                                form_params.append(param)
                         
-                        path_schema['properties'][param_name] = param_schema
-                        
-                        # Path parameters are required by default in OpenAPI
-                        if param.get('required', True):
-                            path_schema['required'].append(param_name)
+                        # Set parameter schemas on the endpoint
+                        if path_params:
+                            endpoint.path_parameters_schema = self._build_parameters_schema(path_params)
+                        if query_params:
+                            endpoint.query_parameters_schema = self._build_parameters_schema(query_params)
+                        if header_params:
+                            endpoint.header_parameters_schema = self._build_parameters_schema(header_params)
+                        if form_params:
+                            endpoint.form_parameters_schema = self._build_parameters_schema(form_params)
                     
-                    # Only add required array if there are required parameters
-                    if not path_schema['required']:
-                        del path_schema['required']
+                    except ValueError as e:
+                        logger.warning(f"Error processing parameters for {method.upper()} {path}: {str(e)}")
                     
-                    endpoint.path_parameters_schema = path_schema
-                
-                # Create header parameters schema
-                if header_params:
-                    header_schema = {
-                        'type': 'object',
-                        'properties': {},
-                        'required': []
-                    }
-                    
-                    for param in header_params:
-                        param_name = param.get('name', '')
-                        param_schema = param.get('schema', {}).copy()  # Make a copy to avoid modifying original
-                        
-                        # Add description from parameter to schema if present
-                        if 'description' in param:
-                            param_schema['description'] = param.get('description')
-                        
-                        header_schema['properties'][param_name] = param_schema
-                        
-                        if param.get('required', False):
-                            header_schema['required'].append(param_name)
-                    
-                    # Only add required array if there are required parameters
-                    if not header_schema['required']:
-                        del header_schema['required']
-                    
-                    endpoint.header_parameters_schema = header_schema
-                
-                # Create form parameters schema
-                if form_params:
-                    form_schema = {
-                        'type': 'object',
-                        'properties': {},
-                        'required': []
-                    }
-                    
-                    for param in form_params:
-                        param_name = param.get('name', '')
-                        param_schema = param.get('schema', {}).copy() or {}  # Make a copy to avoid modifying original
-                        
-                        # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
-                        if not param_schema and 'type' in param:
-                            param_schema = {
-                                'type': param.get('type'),
-                                'description': param.get('description', '')
-                            }
-                            # Copy over other schema-related fields
-                            for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
-                                if field in param:
-                                    param_schema[field] = param[field]
-                        else:
-                            # Resolve any schema references
-                            param_schema = self._resolve_schema_ref(param_schema)
-                            # Add description from parameter to schema if present
-                            if 'description' in param:
-                                param_schema['description'] = param.get('description')
-                        
-                        form_schema['properties'][param_name] = param_schema
-                        
-                        if param.get('required', False):
-                            form_schema['required'].append(param_name)
-                    
-                    # Only add required array if there are required parameters
-                    if not form_schema['required']:
-                        del form_schema['required']
-                    
-                    endpoint.form_parameters_schema = form_schema
-                    
-                    # Add multipart/form-data and application/x-www-form-urlencoded content types
-                    # if not already added via request body
-                    if 'multipart/form-data' not in endpoint.request_content_types:
-                        endpoint.request_content_types.append('multipart/form-data')
-                    if 'application/x-www-form-urlencoded' not in endpoint.request_content_types:
-                        endpoint.request_content_types.append('application/x-www-form-urlencoded')
-                
-                # Extract response schemas
-                responses = operation.get('responses', {})
-                if responses:
-                    # Resolve any references in response schemas
-                    resolved_responses = {}
-                    for status_code, response in responses.items():
-                        resolved_response = response.copy()
-                        if 'content' in response:
-                            resolved_content = {}
-                            for content_type, content_info in response['content'].items():
-                                resolved_content_info = content_info.copy()
-                                if 'schema' in content_info:
-                                    resolved_content_info['schema'] = self._resolve_schema_ref(content_info['schema'])
-                                resolved_content[content_type] = resolved_content_info
-                            resolved_response['content'] = resolved_content
-                        resolved_responses[status_code] = resolved_response
-                    
-                    endpoint.responses = resolved_responses
-                    
-                    # Extract response content types
-                    for status_code, response in resolved_responses.items():
-                        if 'content' in response:
-                            for content_type in response['content']:
+                    # Extract response schemas
+                    try:
+                        responses = operation.get('responses', {})
+                        for status_code, response in responses.items():
+                            if isinstance(response, dict) and '$ref' in response:
+                                response = self._resolve_schema_ref(response)
+                            
+                            content = response.get('content', {})
+                            for content_type, content_info in content.items():
                                 if content_type not in endpoint.response_content_types:
                                     endpoint.response_content_types.append(content_type)
+                                
+                                if 'schema' in content_info:
+                                    try:
+                                        content_info['schema'] = self._resolve_schema_ref(content_info['schema'])
+                                    except ValueError as e:
+                                        logger.warning(f"Skipping response schema for status {status_code} in {method.upper()} {path}: {str(e)}")
+                                        continue
+                            
+                            endpoint.responses[str(status_code)] = response
+                    except ValueError as e:
+                        logger.warning(f"Error processing responses for {method.upper()} {path}: {str(e)}")
+                    
+                    # Add the endpoint to our collection
+                    key = f"{method.upper()}_{path}"
+                    endpoints[key] = endpoint
+                    logger.info(f"Successfully parsed endpoint: {method.upper()} {path}")
                 
-                # Add the endpoint to the result
-                result[endpoint.endpoint_key] = endpoint
+                except Exception as e:
+                    logger.error(f"Failed to parse endpoint {method.upper()} {path}: {str(e)}")
+                    continue
         
-        return result
+        return endpoints
 
     def get_endpoints(self) -> List[Endpoint]:
         """
@@ -615,7 +558,7 @@ class OpenAPIParser:
         Returns:
             The Endpoint object or None if not found
         """
-        key = f"{method.upper()} {path}"
+        key = f"{method.upper()}_{path}"
         return self.endpoints.get(key)
 
     def to_json(self) -> str:
