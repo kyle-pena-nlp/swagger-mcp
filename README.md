@@ -9,18 +9,22 @@
                       |___/ |___/                                
 ```
 
-Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other AI tools. This package enables AI agents to interact with your API endpoints through natural language, making API integration seamless and intuitive.
+Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other AI tools.
 
 ## Quickstart
 
-Install using pipx (recommended):
+Install from PyPI using pipx (recommended):
 ```bash
+brew install pipx
+pipx ensurepath
 pipx install swagger-mcp
 ```
 
-Or install from source:
+Alternatively, install from source:
 ```bash
-bash scripts/install-global.sh
+git clone https://github.com/context-labs/swagger-mcp.git
+cd swagger-mcp
+pipx install -e . --force
 ```
 
 Confirm the installation succeeded:
@@ -36,11 +40,12 @@ swagger-mcp-sample-server
 
 Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the sample server is running.
 
+We'll use this sample server to show how to configure an MCP server in Cursor, Windsurf, or Claude.
 
 ### Cursor
 Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --server-url http://localhost:9000
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000
 ```
 
 **Please Note**: *In Cursor, you may need to replace `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
@@ -96,23 +101,23 @@ Ask your AI agent to list, create, update, and delete products and categories.
 2. Filter endpoints: Only include endpoints by path:
 This will regex search the endpoint paths and only include those that match the pattern.
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --server-url http://localhost:9000 --include-pattern "category"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --include-pattern "category"
 ```
 
 3. Filter endpoints: Exclude endpoints by path:
 This will exclude any endpoints that match the regex pattern.
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --server-url http://localhost:9000 --exclude-pattern "product"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --exclude-pattern "product"
 ```
 
 4. Authentication
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --server-url http://localhost:9000 --bearer-token "your-token-here"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --bearer-token "your-token-here"
 ```
 
 5. Custom headers
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --server-url http://localhost:9000 --additional-headers '{"X-API-Key": "your-key"}'
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --additional-headers '{"X-API-Key": "your-key"}'
 ```
 
 6. Server URLs
@@ -151,10 +156,10 @@ For APIs requiring authentication:
 
 ```bash
 # Using bearer token
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --bearer-token "your-token-here"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --bearer-token "your-token-here"
 
 # Using custom headers
-swagger-mcp --spec http://localhost:9000/openapi.json --name "Product MCP" --additional-headers '{"X-API-Key": "your-key"}'
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --additional-headers '{"X-API-Key": "your-key"}'
 ```
 
 ## For Developers
