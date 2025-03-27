@@ -9,7 +9,7 @@
                       |___/ |___/                                
 ```
 
-Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, or other AI tools.
+Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, or other tools.
 
 ## Quickstart
 
@@ -40,7 +40,7 @@ swagger-mcp-sample-server
 
 Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the sample server is running.
 
-We'll use this sample server to show how to configure an MCP server in Cursor, Windsurf, or Claude.
+We'll use this sample server to show how to configure an MCP server in Cursor or Windsurf.
 
 ### Cursor
 Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
@@ -72,9 +72,11 @@ Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Setti
 }
 ```
 
-That's it! Your API is now accessible through Windsurf, Cursor, or Claude as a set of AI-friendly tools.
+That's it! Your API is now accessible through Windsurf, Cursor, or other tools as a set of AI-friendly tools.
 
 Ask your AI agent to list, create, update, and delete products and categories.
+
+
 
 ## Additional Options
 
@@ -95,7 +97,7 @@ swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --serve
 
 4. Authentication
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --bearer-token "your-token-here" --cursor
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --bearer-token your-token-here --cursor
 ```
 
 5. Custom headers
@@ -126,12 +128,13 @@ swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --serve
 
 ## Limitations
 
-- If you find a Swagger API specification that is not supported, please file an issue. We will add support for it as needed / requested.
+- Cursor MCP integration is very early and limited.  It does not like double quotes in the command line arguments.  You probably still have to fully path to the command (`which swagger-mcp` to get the path).
+- If you find a Swagger API specification that is not supported and you can't do a workaround with any of the available parameters, please file an issue. We will add support for it as needed / requested.
+- We will not support automatic OAuth workflow execution.  If the OAuth workflow ends in a bearer token, you must provide this bearer token as a command line argument.
 - We do not support Swagger/OpenAPI specifications spread across multiple files (i.e.; fragments, extensions, etc.).
 - We do not support path variable substitution in the base server URLs (but we *do* support path variable in the endpoint paths).
-- We do not support automatic OAuth workflow execution.  If the OAuth workflow ends in a bearer token, you must provide this bearer token as a command line argument.
 - In general, we do not support all Swagger/OpenAPI features.  The Swagger/OpenAPI standard is vast, and support for more obscure features will be added as needed / requested.
-- All endpoints are exposed as tools.  When Cursor re-implements support for MCP resources, Swagger MCP will support resources as well.
+- When Cursor re-implements support for MCP resources, you will have the option to specify some endpoints as resources instead of tools.
 
 ## Command Line Options
 
