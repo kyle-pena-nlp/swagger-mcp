@@ -415,3 +415,10 @@ def test_parse_countries_spec():
     parser = OpenAPIParser(countries_yaml_path)
     # If we get here without exceptions, the test passes
     assert True
+
+def test_parse_pokeapi_spec():
+    """Test parsing the pokeapi.yaml OpenAPI specification."""
+    pokeapi_yaml_path = os.path.join(os.path.dirname(__file__), 'fixtures', 'pokeapi.yaml')
+    parser = OpenAPIParser(pokeapi_yaml_path)
+    # If we get here without exceptions, the test passes
+    assert True

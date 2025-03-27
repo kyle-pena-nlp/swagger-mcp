@@ -58,6 +58,8 @@ We'll use this sample server to show how to configure an MCP server in Cursor or
 
 Also note the `--cursor` flag. This is for Cursor compatibility.
 
+Cursor MCP integration is currently in beta and may not work as expected.  Currently, Windsurf is a better experience in general.
+
 ### Windsurf
 Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
 ```json
@@ -107,8 +109,7 @@ See other examples in [Other Fun Servers](#other-fun-servers).
         "--server-url",
         "http://localhost:9000",
         "--include-pattern",
-        "category",
-        "--cursor"
+        "category"
       ]
     }
   }
@@ -129,8 +130,7 @@ See other examples in [Other Fun Servers](#other-fun-servers).
         "--server-url",
         "http://localhost:9000",
         "--exclude-pattern",
-        "product",
-        "--cursor"
+        "product"
       ]
     }
   }
@@ -152,7 +152,6 @@ See other examples in [Other Fun Servers](#other-fun-servers).
         "http://localhost:9000",
         "--bearer-token",
         "your-token-here",
-        "--cursor"
       ]
     }
   }
@@ -176,7 +175,6 @@ See other examples in [Other Fun Servers](#other-fun-servers).
         "X-Some-Header:your-value",
         "--header",
         "X-Some-Other-Header:your-value",
-        "--cursor"
       ]
     }
   }
@@ -205,8 +203,7 @@ You can include as many `--const` options as you need.
         "--const",
         "parameter-name:your-value",
         "--const",
-        "parameter-name2:your-value2",
-        "--cursor"
+        "parameter-name2:your-value2"
       ]
     }
   }
@@ -225,14 +222,25 @@ You can include as many `--const` options as you need.
 
 ## Limitations
 
-- Cursor MCP integration is very early and frankly broken.  (It does not like double quotes in the command line arguments.  It does not like dashes in tool names.  Sometimes, parameter descriptions cause silent errors).  I try to address some of these with cursor mode `--cursor`, but it's still not great.  Until Cursor MCP support gets better, you'll be happier with Windsurf.
 - Endpoints that have recursive schema references are not yet supported.
-- When Cursor re-implements support for MCP resources, you will have the option to specify some endpoints as resources instead of tools.
-- If you find a Swagger API specification that is not supported and you can't use any of the available parameters for a workaround, please file an issue. We will add support for it as needed / requested.
-- We will not support automatic OAuth workflow execution.  If the OAuth workflow creates a bearer token, you must obtain this token yourself by performing OAuth out-of-band, and provide this bearer token as a command line argument.
+- Cursor MCP integration is very early and frankly broken.  (It does not like double quotes in the command line arguments.  It does not like dashes in tool names.  Sometimes, parameter descriptions cause silent errors).  I try to address some of these with cursor mode `--cursor`, but it's still not great.  Until Cursor MCP support gets better, you'll be happier with Windsurf.
+- We will never support automatic OAuth workflow execution.  If the OAuth workflow creates a bearer token, you must obtain this token yourself by performing OAuth out-of-band, and provide this bearer token as a command line argument.
 - We do not support Swagger/OpenAPI specifications spread across multiple files (i.e.; fragments, extensions, etc.).
 - We do not support path variable substitution in server URLs (but we *do* support path variables in endpoints).
 - In general, we do not support all Swagger/OpenAPI features.  The Swagger/OpenAPI standard is vast, and support for more obscure features will be added as needed / requested.
+
+## Help
+
+- If you have trouble spinning up a server, try the following command: `REAL_LOGGER=true swagger-mcp-parse-dry-run ...` and provide all the same arguments you would use to spin up a server. Include this information in any issue you file.
+- If you find a Swagger API specification that is not supported and you can't use any of the available parameters for a workaround, please file an issue. We will add support for it as needed / requested.
+
+
+## Roadmap
+
+- Support recursive schema references
+- Support path variable substitution in server URLs
+- Revamp the `--cursor` mode to better work around Cursor's limitations
+- Provide support for MCP resources
 
 ## Command Line Options
 
@@ -329,15 +337,17 @@ For APIs requiring authentication:
         "https://raw.githubusercontent.com/PokeAPI/pokeapi/refs/heads/master/openapi.yml",
         "--name",
         "pokeapi",
-        "--filter-include",
-        "pokemon",
-        "--cursor"
+        "--include-pattern",
+        "pokemon"
       ]
     }
   }
 }
 ```
 
+## TODO: Slack
+
+## TODO: Petstore
 
 
 ## For Developers
