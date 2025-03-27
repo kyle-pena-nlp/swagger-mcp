@@ -40,7 +40,8 @@ class OpenAPIMCPServer:
         additional_headers: Optional[Dict[str, str]] = None,
         include_pattern: Optional[str] = None,
         exclude_pattern: Optional[str] = None,
-        cursor_mode: bool = False
+        cursor_mode: bool = False,
+        const_values: Optional[Dict[str, str]] = None
     ):
         """
         Initialize the OpenAPI MCP Server.
@@ -56,6 +57,7 @@ class OpenAPIMCPServer:
             include_pattern: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
             exclude_pattern: Optional regex pattern to exclude endpoints by path (e.g., "/internal/.*")
             cursor_mode: Whether to enable Cursor-specific quirk handling
+            const_values: Optional dictionary of parameter names and their constant values
         """
         self.server_name = server_name
         self.server_version = server_version or "1.0.0"  # Ensure server_version is not None
@@ -65,6 +67,7 @@ class OpenAPIMCPServer:
         self.include_pattern = include_pattern
         self.exclude_pattern = exclude_pattern
         self.cursor_mode = cursor_mode
+        self.const_values = const_values or {}
         
         # Create the MCP server
         self.server = Server(
@@ -145,8 +148,13 @@ class OpenAPIMCPServer:
                 }
                 
                 if endpoint.combined_parameter_schema and 'properties' in endpoint.combined_parameter_schema:
-                    input_schema["properties"] = endpoint.combined_parameter_schema['properties']
+                    input_schema["properties"] = endpoint.combined_parameter_schema['properties'].copy()
                     
+                    # Remove const parameters from the input schema
+                    for param_name in self.const_values:
+                        if param_name in input_schema["properties"]:
+                            del input_schema["properties"][param_name]
+                            
                     # In cursor mode, remove parameter descriptions
                     if self.cursor_mode and isinstance(input_schema["properties"], dict):
                         for param in input_schema["properties"].values():
@@ -154,7 +162,7 @@ class OpenAPIMCPServer:
                                 del param["description"]
                     
                     if 'required' in endpoint.combined_parameter_schema:
-                        input_schema["required"] = endpoint.combined_parameter_schema['required']
+                        input_schema["required"] = [r for r in endpoint.combined_parameter_schema['required'] if r not in self.const_values]
                 
                 # Create the tool definition
                 tool = Tool(
@@ -195,10 +203,17 @@ class OpenAPIMCPServer:
                 # Create an endpoint invoker
                 invoker = EndpointInvoker(endpoint)
                 
-                # Invoke the endpoint with the provided parameters
+                # Invoke the endpoint with the provided parameters and const values
                 logger.info(f"Sending request to: {self.server_url or '[default server]'}")
+                
+                # Merge const values with provided arguments
+                merged_arguments = {**arguments}
+                for param_name, value in self.const_values.items():
+                    if param_name in endpoint.combined_parameter_schema.get('properties', {}):
+                        merged_arguments[param_name] = value
+                
                 response = invoker.invoke_with_params(
-                    params=arguments,
+                    params=merged_arguments,
                     server_url=self.server_url,
                     bearer_token=self.bearer_token,
                     headers=self.additional_headers
@@ -253,7 +268,8 @@ def run_server(
     additional_headers: Optional[Dict[str, str]] = None,
     include_pattern: Optional[str] = None,
     exclude_pattern: Optional[str] = None,
-    cursor_mode: bool = False
+    cursor_mode: bool = False,
+    const_values: Optional[Dict[str, str]] = None
 ):
     """
     Run an OpenAPI MCP Server with the given parameters.
@@ -267,6 +283,7 @@ def run_server(
         include_pattern: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
         exclude_pattern: Optional regex pattern to exclude endpoints by path (e.g., "/internal/.*")
         cursor_mode: Whether to enable Cursor-specific quirk handling
+        const_values: Optional dictionary of parameter names and their constant values
     """
     logger.info(f"Starting OpenAPI MCP Server: {server_name}")
     logger.info(f"OpenAPI spec: {openapi_spec}")
@@ -286,7 +303,8 @@ def run_server(
         additional_headers=additional_headers,
         include_pattern=include_pattern,
         exclude_pattern=exclude_pattern,
-        cursor_mode=cursor_mode
+        cursor_mode=cursor_mode,
+        const_values=const_values
     )
     
     logger.info("Server initialized, starting main loop")
@@ -305,6 +323,7 @@ def main():
         parser.add_argument("--include-pattern", help="Regex pattern to include only specific endpoint paths (e.g., '/api/v1/.*')")
         parser.add_argument("--exclude-pattern", help="Regex pattern to exclude specific endpoint paths (e.g., '/internal/.*')")
         parser.add_argument("--cursor", action='store_true', help="Run the server in Cursor mode to deal with Cursor quirks")
+        parser.add_argument("--const-values", help="Optional dictionary of parameter names and their constant values (in JSON format)")
         
         args = parser.parse_args()
         
@@ -318,6 +337,15 @@ def main():
                 except ValueError:
                     logger.warning(f"Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
         
+        # Process const values into a dictionary if provided
+        const_values = None
+        if args.const_values:
+            try:
+                const_values = json.loads(args.const_values)
+            except json.JSONDecodeError:
+                logger.error(f"Failed to parse const values: {args.const_values}")
+                raise
+        
         run_server(
             openapi_spec=args.spec,
             server_name=args.name,
@@ -326,7 +354,8 @@ def main():
             additional_headers=additional_headers if additional_headers else None,
             include_pattern=args.include_pattern,
             exclude_pattern=args.exclude_pattern,
-            cursor_mode=args.cursor
+            cursor_mode=args.cursor,
+            const_values=const_values
         ) 
     except Exception as e:
         logger.error(f"Server failed to start: {str(e)}", exc_info=True)
