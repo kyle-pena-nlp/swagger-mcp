@@ -1,4 +1,3 @@
-```
    _____                                    __  __  _____ _____  
   / ____|                                  |  \/  |/ ____|  __ \ 
  | (_____      ____ _  __ _  __ _  ___ _ __| \  / | |    | |__) |
@@ -7,7 +6,7 @@
  |_____/ \_/\_/ \__,_|\__, |\__, |\___|_|  |_|  |_|\_____|_|     
                        __/ | __/ |                               
                       |___/ |___/                                
-```
+
 # Swagger MCP
 
 Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other AI tools. This package enables AI agents to interact with your API endpoints through natural language, making API integration seamless and intuitive.
@@ -143,6 +142,16 @@ swagger-mcp --spec api.yaml --name "Custom Auth API" --additional-headers '{"X-A
 
 ### Installation
 
+For development, install with development dependencies:
+```bash
+# Clone the repository
+git clone https://github.com/context-labs/swagger-mcp.git
+cd swagger-mcp
+
+# Install in development mode with dev dependencies
+pip install -e ".[dev]"
+```
+
 For a global installation on your local machine, use:
 ```bash
 bash scripts/install-global.sh
@@ -151,13 +160,13 @@ bash scripts/install-global.sh
 ### Unit Tests
 
 ```bash
-bash scripts/tests.sh
+pytest swagger_mcp/tests/unit -v
 ```
 
 ### Integration Tests
 
 ```bash
-bash scripts/integration-tests.sh
+pytest swagger_mcp/tests/integration -v --capture=no --log-cli-level=INFO
 ```
 
 ### MCP Inspector (For interactive exploration of the MCP Server)
@@ -173,4 +182,3 @@ bash scripts/inspector.sh
 Click "Connect" and then "List Tools" to begin interacting with your MCP Server.
 
 ![MCP Inspector](images/mcp-inspector.png)
-

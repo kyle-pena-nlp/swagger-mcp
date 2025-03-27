@@ -8,7 +8,6 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 # Function to create and activate a virtual environment
 setup_venv() {
     local venv_dir="$1"
-    local requirements_file="$2"
     
     # Create virtual environment if it doesn't exist
     if [ ! -d "$venv_dir" ]; then
@@ -19,12 +18,10 @@ setup_venv() {
     # Activate virtual environment
     source "$venv_dir/bin/activate"
     
-    # Install requirements if they exist
-    if [ -f "$requirements_file" ]; then
-        echo "Installing requirements..."
-        pip install -r "$requirements_file"
-    fi
+    # Install the package in normal mode
+    echo "Installing package..."
+    pip install -e "$PROJECT_ROOT"
 }
 
 # Set up the main project's virtual environment
-setup_venv "$PROJECT_ROOT/.venv" "$PROJECT_ROOT/requirements.txt"
+setup_venv "$PROJECT_ROOT/.venv"
