@@ -71,6 +71,7 @@ dev = [
 
 [project.scripts]
 swagger-mcp = "swagger_mcp.openapi_mcp_server:main"
+swagger-mcp-sample = "sample_rest_api.run:run_cli"
 
 [build-system]
 requires = [
@@ -82,7 +83,7 @@ requires = [
 build-backend = "setuptools.build_meta"
 
 [tool.setuptools]
-packages = {find = {exclude = ["tests*", "sample_rest_api*"]}}
+packages = {find = {include = ["swagger_mcp*", "sample_rest_api*"]}}
 
 [tool.pytest.ini_options]
 testpaths = ["swagger_mcp/tests/unit", "swagger_mcp/tests/integration"]

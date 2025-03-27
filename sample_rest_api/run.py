@@ -16,8 +16,9 @@ def run(port, use_memory_db):
     uvicorn.run("sample_rest_api.app.main:app", host="0.0.0.0", port=port, reload=True)
 
 
-if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run the Product-Category API server")
+def run_cli():
+    """Entry point for the swagger-mcp-sample command"""
+    parser = argparse.ArgumentParser(description="Run the sample Product-Category API server")
     parser.add_argument(
         "--port", 
         type=int, 
@@ -25,4 +26,8 @@ if __name__ == "__main__":
         help="Port to run the server on (default: 9000)"
     )
     args = parser.parse_args()
-    run(args.port, True)  # Force memory-db to True since it's required
+    run(args.port, True)  # Always use memory-db for simplicity
+
+
+if __name__ == "__main__":
+    run_cli()
