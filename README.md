@@ -31,34 +31,7 @@ swagger-mcp-sample-server
 
 Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the sample server is running.
 
-We'll use this sample server to show how to configure an MCP server in Cursor or Windsurf.
-
-### Cursor (>=v0.46)
-
-```json
-{
-  "mcpServers": {
-    "product mcp": {
-      "command": "swagger-mcp",
-      "args": [
-        "--spec",
-        "http://localhost:9000/openapi.json",
-        "--name",
-        "Product MCP",
-        "--server-url",
-        "http://localhost:9000",
-        "--cursor"
-      ]
-    }
-  }
-}
-```
-
-**Please Note**: *In Cursor, you may need to replace the command `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
-
-Also note the `--cursor` flag. This is for Cursor compatibility.
-
-Cursor MCP integration is currently in beta and may not work as expected.  Currently, Windsurf is a better experience in general.
+We'll use this sample server to show how to configure an MCP server in Windsurf.
 
 ### Windsurf
 Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
@@ -85,6 +58,38 @@ That's it! Your API is now accessible through Windsurf, Cursor, or other tools a
 Ask your AI agent to list, create, update, and delete products and categories.
 
 ![Demo](images/furniture.gif)
+
+### Cursor (>=v0.46)
+
+Support for Cursor is still in beta as Cursor MCP integration matures.  Windsurf is currently the preferred experience.
+
+```json
+{
+  "mcpServers": {
+    "product mcp": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "http://localhost:9000/openapi.json",
+        "--name",
+        "Product MCP",
+        "--server-url",
+        "http://localhost:9000",
+        "--cursor"
+      ]
+    }
+  }
+}
+```
+
+**Please Note**: *In Cursor, you may need to replace the command `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
+
+Also note the `--cursor` flag. This is for Cursor compatibility.
+
+Again, MCP integration is currently in beta in Cursor as of v0.46 and may not work as expected.  Currently, Windsurf is a better experience in general.
+
+
+
 
 See other examples in [Other Fun Servers](#other-fun-servers).
 
