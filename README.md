@@ -8,7 +8,7 @@ Install from PyPI using pipx (recommended):
 ```bash
 brew install pipx
 pipx ensurepath
-pipx install swagger-mcp
+pipx install --force swagger-mcp
 ```
 
 Alternatively, install from source:
@@ -32,6 +32,8 @@ swagger-mcp-sample-server
 Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the sample server is running.
 
 We'll use this sample server to show how to configure an MCP server in Windsurf.
+
+**Make sure the sample server is running before following the Windsurf or Cursor instructions below.**
 
 ### Windsurf
 Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
@@ -330,25 +332,7 @@ For APIs requiring authentication:
 }
 ```
 
-## PokeAPI
-
-```json
-{
-  "mcpServers": {
-    "pokeapi": {
-      "command": "swagger-mcp",
-      "args": [
-        "--spec",
-        "https://raw.githubusercontent.com/PokeAPI/pokeapi/refs/heads/master/openapi.yml",
-        "--name",
-        "pokeapi",
-        "--include-pattern",
-        "pokemon"
-      ]
-    }
-  }
-}
-```
+## TODO: PokeAPI
 
 ## TODO: Slack
 
