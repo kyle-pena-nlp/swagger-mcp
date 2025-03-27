@@ -76,7 +76,7 @@ That's it! Your API is now accessible through Windsurf, Cursor, or other tools a
 
 Ask your AI agent to list, create, update, and delete products and categories.
 
-
+![Demo](images/cereal.gif)
 
 ## Additional Options
 
