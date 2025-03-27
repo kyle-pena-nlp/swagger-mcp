@@ -1,3 +1,4 @@
+```
    _____                                    __  __  _____ _____  
   / ____|                                  |  \/  |/ ____|  __ \ 
  | (_____      ____ _  __ _  __ _  ___ _ __| \  / | |    | |__) |
@@ -6,8 +7,7 @@
  |_____/ \_/\_/ \__,_|\__, |\__, |\___|_|  |_|  |_|\_____|_|     
                        __/ | __/ |                               
                       |___/ |___/                                
-
-# Swagger MCP
+```
 
 Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other AI tools. This package enables AI agents to interact with your API endpoints through natural language, making API integration seamless and intuitive.
 
