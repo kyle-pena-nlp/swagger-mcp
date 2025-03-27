@@ -314,3 +314,89 @@ def test_circular_schema_ref_detection():
         
         # Verify that no endpoints were created due to the circular reference
         assert len(endpoints) == 0
+
+def test_graceful_error_handling():
+    """Test that errors in parameter parsing are handled gracefully:
+    - Optional parameters with errors are omitted
+    - Required parameters with errors cause endpoint to be omitted
+    """
+    spec = {
+        "openapi": "3.0.0",
+        "info": {"title": "Test API", "version": "1.0.0"},
+        "paths": {
+            "/test1": {
+                "post": {
+                    "parameters": [
+                        {
+                            "name": "optional_param",
+                            "in": "query",
+                            "required": False,
+                            "schema": {
+                                "$ref": "#/components/schemas/CircularOptional"
+                            }
+                        },
+                        {
+                            "name": "valid_param",
+                            "in": "query",
+                            "required": False,
+                            "schema": {
+                                "type": "string"
+                            }
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Success"}
+                    }
+                }
+            },
+            "/test2": {
+                "post": {
+                    "parameters": [
+                        {
+                            "name": "required_param",
+                            "in": "query",
+                            "required": True,
+                            "schema": {
+                                "$ref": "#/components/schemas/CircularRequired"
+                            }
+                        }
+                    ],
+                    "responses": {
+                        "200": {"description": "Success"}
+                    }
+                }
+            }
+        },
+        "components": {
+            "schemas": {
+                "CircularOptional": {
+                    "type": "object",
+                    "properties": {
+                        "self": {"$ref": "#/components/schemas/CircularOptional"}
+                    }
+                },
+                "CircularRequired": {
+                    "type": "object",
+                    "properties": {
+                        "self": {"$ref": "#/components/schemas/CircularRequired"}
+                    }
+                }
+            }
+        }
+    }
+
+    parser = OpenAPIParser(spec)
+    endpoints = parser.get_endpoints()
+
+    # Endpoint with optional circular ref should exist
+    test1_endpoint = parser.get_endpoint_by_method_path("POST", "/test1")
+    assert test1_endpoint is not None
+    
+    # The optional parameter should be omitted, but valid_param should remain
+    assert test1_endpoint.query_parameters_schema is not None
+    assert "optional_param" not in test1_endpoint.query_parameters_schema["properties"]
+    assert "valid_param" in test1_endpoint.query_parameters_schema["properties"]
+    
+    # Endpoint with required circular ref should be omitted
+    test2_endpoint = parser.get_endpoint_by_method_path("POST", "/test2")
+    assert test2_endpoint is None

@@ -275,7 +275,7 @@ class OpenAPIParser:
                 
         return False
 
-    def _build_parameters_schema(self, parameters: List[Dict[str, Any]]) -> Dict[str, Any]:
+    def _build_parameters_schema(self, parameters: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
         Build a JSON Schema object from a list of parameters.
         
@@ -283,7 +283,10 @@ class OpenAPIParser:
             parameters: List of parameter objects from the OpenAPI spec
             
         Returns:
-            A JSON Schema object representing the parameters
+            A JSON Schema object representing the parameters, or None if required parameters have errors
+            
+        Raises:
+            ValueError: If the parameter definition is invalid
         """
         schema = {
             'type': 'object',
@@ -294,27 +297,51 @@ class OpenAPIParser:
         for param in parameters:
             param_name = param.get('name', '')
             param_schema = param.get('schema', {}).copy()
+            is_required = param.get('required', False) or param.get('in') == 'path'
             
-            # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
-            if not param_schema and 'type' in param:
-                param_schema = {
-                    'type': param.get('type'),
-                    'description': param.get('description', '')
-                }
-                # Copy over other schema-related fields
-                for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
-                    if field in param:
-                        param_schema[field] = param[field]
-            
-            # Add description from parameter to schema if present
-            if 'description' in param:
-                param_schema['description'] = param.get('description')
-            
-            schema['properties'][param_name] = param_schema
-            
-            # Path parameters are required by default in OpenAPI
-            if param.get('in') == 'path' or param.get('required', False):
-                schema['required'].append(param_name)
+            try:
+                # Handle OpenAPI 2.0 style parameters where schema fields are directly in the parameter
+                if not param_schema and 'type' in param:
+                    param_schema = {
+                        'type': param.get('type'),
+                        'description': param.get('description', '')
+                    }
+                    # Copy over other schema-related fields
+                    for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
+                        if field in param:
+                            param_schema[field] = param[field]
+                
+                # Try to resolve any schema references
+                if isinstance(param_schema, dict) and '$ref' in param_schema:
+                    param_schema = self._resolve_schema_ref(param_schema)
+                
+                # Add description from parameter to schema if present
+                if 'description' in param:
+                    param_schema['description'] = param.get('description')
+                
+                schema['properties'][param_name] = param_schema
+                
+                if is_required:
+                    schema['required'].append(param_name)
+                    
+            except CircularReferenceError as e:
+                if is_required:
+                    # If a required parameter has a circular reference, skip the entire endpoint
+                    logger.warning(f"Required parameter {param_name} has circular reference, skipping endpoint")
+                    return None
+                else:
+                    # If an optional parameter has a circular reference, just skip that parameter
+                    logger.warning(f"Optional parameter {param_name} has circular reference, omitting parameter")
+                    continue
+            except ValueError as e:
+                if is_required:
+                    # If a required parameter has any other error, skip the entire endpoint
+                    logger.warning(f"Required parameter {param_name} has error: {str(e)}, skipping endpoint")
+                    return None
+                else:
+                    # If an optional parameter has any other error, just skip that parameter
+                    logger.warning(f"Optional parameter {param_name} has error: {str(e)}, omitting parameter")
+                    continue
         
         # Only add required array if there are required parameters
         if not schema['required']:
@@ -324,25 +351,36 @@ class OpenAPIParser:
 
     def _parse_endpoints(self) -> Dict[str, Endpoint]:
         """
-        Parse the OpenAPI specification to extract endpoints information.
+        Parse the OpenAPI spec to extract all endpoints.
         
         Returns:
-            A dictionary mapping endpoint keys (method + path) to Endpoint objects
+            A dictionary mapping endpoint keys to Endpoint objects
         """
         logger.info("Parsing OpenAPI specification endpoints")
         endpoints = {}
-        paths = self.spec.get('paths', {})
         
-        for path, path_item in paths.items():
-            # Skip path parameters for now, we'll merge them with operation parameters
-            path_parameters = path_item.get('parameters', [])
+        # Get the global security requirements
+        self.global_security = self.spec.get('security', [])
+        
+        # Get the global servers list
+        self.servers = self.spec.get('servers', [])
+        
+        # Process each path
+        for path, path_item in self.spec.get('paths', {}).items():
+            # Skip non-operation fields
+            if not isinstance(path_item, dict):
+                continue
+                
+            # Get path-level parameters
+            path_level_params = path_item.get('parameters', [])
             
+            # Process each HTTP method
             for method, operation in path_item.items():
-                # Skip non-operation fields like parameters, summary, etc.
-                if method in ['parameters', 'summary', 'description', 'servers']:
+                if method not in ['get', 'put', 'post', 'delete', 'options', 'head', 'patch', 'trace']:
                     continue
-                    
+                
                 try:
+                    # Create a new endpoint
                     endpoint = Endpoint(
                         path=path,
                         method=method.upper(),
@@ -354,7 +392,7 @@ class OpenAPIParser:
                         tags=operation.get('tags', [])
                     )
                     
-                    # Handle operation-level security, falling back to global security
+                    # Process security requirements
                     operation_security = operation.get('security')
                     if operation_security is not None:
                         endpoint.security_requirements = operation_security
@@ -370,88 +408,115 @@ class OpenAPIParser:
                         if endpoint.requires_oauth:
                             endpoint.oauth_scopes = self._get_oauth_scopes(self.global_security)
                     
-                    # Extract request body schema if present
-                    request_body = operation.get('requestBody', {})
-                    if request_body:
-                        try:
-                            endpoint.request_body_required = request_body.get('required', False)
-                            content = request_body.get('content', {})
-                            
-                            # Look for application/json content type first
-                            json_content = content.get('application/json', {})
-                            if json_content and 'schema' in json_content:
-                                endpoint.request_body_schema = self._resolve_schema_ref(json_content['schema'])
-                                endpoint.request_content_types.append('application/json')
-                            else:
-                                # If no JSON content type, use the first available content type
-                                for content_type, content_info in content.items():
-                                    if 'schema' in content_info:
-                                        endpoint.request_body_schema = self._resolve_schema_ref(content_info['schema'])
-                                        endpoint.request_content_types.append(content_type)
-                                        break
-                        except ValueError as e:
-                            logger.warning(f"Skipping request body schema for {method.upper()} {path}: {str(e)}")
+                    # Process parameters
+                    operation_params = operation.get('parameters', [])
+                    all_params = path_level_params + operation_params
                     
-                    # Extract parameters (both from operation and path item levels)
-                    try:
-                        parameters = []
-                        
-                        # Add path-level parameters if present
-                        if path_parameters:
-                            parameters.extend(path_parameters)
-                        
-                        # Add operation-level parameters
-                        if 'parameters' in operation:
-                            parameters.extend(operation['parameters'])
-                        
-                        # Process parameters by type
-                        path_params = []
-                        query_params = []
-                        header_params = []
-                        form_params = []
-                        
-                        for param in parameters:
-                            # Resolve parameter schema if it's a reference
-                            if isinstance(param, dict) and '$ref' in param:
+                    # Group parameters by type
+                    path_params = []
+                    query_params = []
+                    header_params = []
+                    form_params = []
+                    
+                    skip_endpoint = False
+                    for param in all_params:
+                        # Resolve parameter schema if it's a reference
+                        if isinstance(param, dict) and '$ref' in param:
+                            try:
                                 param = self._resolve_schema_ref(param)
-                            
-                            param_schema = param.get('schema', {})
-                            if isinstance(param_schema, dict) and '$ref' in param_schema:
-                                try:
-                                    param['schema'] = self._resolve_schema_ref(param_schema)
-                                except ValueError as e:
-                                    logger.warning(f"Skipping parameter schema for {param.get('name', 'unknown')} in {method.upper()} {path}: {str(e)}")
-                                    continue
-                            
-                            param_in = param.get('in')
-                            if param_in == 'path':
-                                path_params.append(param)
-                            elif param_in == 'query':
-                                query_params.append(param)
-                            elif param_in == 'header':
-                                header_params.append(param)
-                            elif param_in == 'formData':
-                                form_params.append(param)
+                            except (ValueError, CircularReferenceError) as e:
+                                logger.warning(f"Error resolving parameter reference: {str(e)}")
+                                if param.get('required', False) or param.get('in') == 'path':
+                                    skip_endpoint = True
+                                continue
                         
+                        param_schema = param.get('schema', {})
+                        if isinstance(param_schema, dict) and '$ref' in param_schema:
+                            try:
+                                param['schema'] = self._resolve_schema_ref(param_schema)
+                            except (ValueError, CircularReferenceError) as e:
+                                logger.warning(f"Error resolving parameter schema reference: {str(e)}")
+                                if param.get('required', False) or param.get('in') == 'path':
+                                    skip_endpoint = True
+                                continue
+                        
+                        param_in = param.get('in')
+                        if param_in == 'path':
+                            path_params.append(param)
+                        elif param_in == 'query':
+                            query_params.append(param)
+                        elif param_in == 'header':
+                            header_params.append(param)
+                        elif param_in == 'formData':
+                            form_params.append(param)
+                    
+                    # Skip this endpoint if any required parameters had errors
+                    if skip_endpoint:
+                        logger.warning(f"Skipping endpoint {method.upper()} {path} due to required parameter errors")
+                        continue
+                    
+                    try:
                         # Set parameter schemas on the endpoint
                         if path_params:
                             endpoint.path_parameters_schema = self._build_parameters_schema(path_params)
+                            if endpoint.path_parameters_schema is None:
+                                # Skip this endpoint if path parameters had errors
+                                logger.warning(f"Skipping endpoint {method.upper()} {path} due to path parameter errors")
+                                continue
                         if query_params:
                             endpoint.query_parameters_schema = self._build_parameters_schema(query_params)
+                            if endpoint.query_parameters_schema is None:
+                                # Skip this endpoint if query parameters had errors
+                                logger.warning(f"Skipping endpoint {method.upper()} {path} due to query parameter errors")
+                                continue
                         if header_params:
                             endpoint.header_parameters_schema = self._build_parameters_schema(header_params)
+                            if endpoint.header_parameters_schema is None:
+                                # Skip this endpoint if header parameters had errors
+                                logger.warning(f"Skipping endpoint {method.upper()} {path} due to header parameter errors")
+                                continue
                         if form_params:
                             endpoint.form_parameters_schema = self._build_parameters_schema(form_params)
-                    
-                    except ValueError as e:
-                        logger.warning(f"Error processing parameters for {method.upper()} {path}: {str(e)}")
-                    
-                    # Extract response schemas
-                    try:
+                            if endpoint.form_parameters_schema is None:
+                                # Skip this endpoint if form parameters had errors
+                                logger.warning(f"Skipping endpoint {method.upper()} {path} due to form parameter errors")
+                                continue
+                        
+                        # Process request body
+                        request_body = operation.get('requestBody', {})
+                        if request_body:
+                            try:
+                                content = request_body.get('content', {})
+                                endpoint.request_body_required = request_body.get('required', False)
+                                endpoint.request_content_types = list(content.keys())
+                                
+                                # Get the first content type's schema
+                                if content:
+                                    first_content_type = next(iter(content))
+                                    schema = content[first_content_type].get('schema', {})
+                                    if schema:
+                                        endpoint.request_body_schema = self._resolve_schema_ref(schema)
+                            except CircularReferenceError as e:
+                                if endpoint.request_body_required:
+                                    # Skip this endpoint if required request body has errors
+                                    logger.warning(f"Skipping endpoint {method.upper()} {path} due to required request body errors")
+                                    continue
+                                else:
+                                    # Just skip the request body if it's optional
+                                    logger.warning(f"Omitting optional request body for {method.upper()} {path} due to errors")
+                                    endpoint.request_body_schema = None
+                                    endpoint.request_body_required = False
+                                    endpoint.request_content_types = []
+                        
+                        # Process responses
                         responses = operation.get('responses', {})
                         for status_code, response in responses.items():
                             if isinstance(response, dict) and '$ref' in response:
-                                response = self._resolve_schema_ref(response)
+                                try:
+                                    response = self._resolve_schema_ref(response)
+                                except (ValueError, CircularReferenceError) as e:
+                                    logger.warning(f"Error resolving response reference: {str(e)}")
+                                    continue
                             
                             content = response.get('content', {})
                             for content_type, content_info in content.items():
@@ -461,21 +526,23 @@ class OpenAPIParser:
                                 if 'schema' in content_info:
                                     try:
                                         content_info['schema'] = self._resolve_schema_ref(content_info['schema'])
-                                    except ValueError as e:
-                                        logger.warning(f"Skipping response schema for status {status_code} in {method.upper()} {path}: {str(e)}")
+                                    except (ValueError, CircularReferenceError) as e:
+                                        logger.warning(f"Error resolving response schema reference: {str(e)}")
                                         continue
                             
                             endpoint.responses[str(status_code)] = response
+                        
+                        # Add the endpoint to our collection
+                        key = f"{method.upper()}_{path}"
+                        endpoints[key] = endpoint
+                        logger.info(f"Successfully parsed endpoint: {method.upper()} {path}")
+                        
                     except ValueError as e:
-                        logger.warning(f"Error processing responses for {method.upper()} {path}: {str(e)}")
-                    
-                    # Add the endpoint to our collection
-                    key = f"{method.upper()}_{path}"
-                    endpoints[key] = endpoint
-                    logger.info(f"Successfully parsed endpoint: {method.upper()} {path}")
-                
+                        logger.warning(f"Error processing parameters for {method.upper()} {path}: {str(e)}")
+                        continue
+                        
                 except Exception as e:
-                    logger.error(f"Failed to parse endpoint {method.upper()} {path}: {str(e)}")
+                    logger.warning(f"Error processing endpoint {method.upper()} {path}: {str(e)}")
                     continue
         
         return endpoints
@@ -564,6 +631,20 @@ class OpenAPIParser:
         
         Args:
             method: HTTP method (GET, POST, etc.)
+            path: URL path
+            
+        Returns:
+            The Endpoint object or None if not found
+        """
+        key = f"{method.upper()}_{path}"
+        return self.endpoints.get(key)
+
+    def get_endpoint_by_method_path(self, method: str, path: str) -> Optional[Endpoint]:
+        """
+        Get an endpoint by its HTTP method and path.
+        
+        Args:
+            method: HTTP method (e.g., GET, POST)
             path: URL path
             
         Returns:

@@ -71,6 +71,7 @@ dev = [
 
 [project.scripts]
 swagger-mcp = "swagger_mcp.openapi_mcp_server:main"
+swagger-mcp-parse-dry-run = "swagger_mcp.parse_dry_run:main"
 swagger-mcp-sample-server = "sample_rest_api.run:run_cli"
 
 [build-system]

@@ -20,6 +20,7 @@ from swagger_mcp.endpoint import Endpoint
 from swagger_mcp.simple_endpoint import SimpleEndpoint, create_simple_endpoint
 from swagger_mcp.endpoint_invoker import EndpointInvoker
 from swagger_mcp.logging import setup_logger
+from swagger_mcp.server_arg_parser import parse_args
 
 logger = setup_logger(__name__)
 
@@ -313,38 +314,7 @@ def run_server(
 
 def main():
     try:
-        # Simple CLI to start the server
-        parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI/Swagger specification")
-        parser.add_argument("--spec", required=True, help="Path or URL to your OpenAPI/Swagger specification")
-        parser.add_argument("--name", required=True, help="Name for your MCP server (shows up in Windsurf/Cursor)")
-        parser.add_argument("--server-url", help="Base URL for API calls (overrides servers defined in spec)")
-        parser.add_argument("--bearer-token", help="Bearer token for authenticated requests")
-        parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
-        parser.add_argument("--include-pattern", help="Regex pattern to include only specific endpoint paths (e.g., '/api/v1/.*')")
-        parser.add_argument("--exclude-pattern", help="Regex pattern to exclude specific endpoint paths (e.g., '/internal/.*')")
-        parser.add_argument("--cursor", action='store_true', help="Run the server in Cursor mode to deal with Cursor quirks")
-        parser.add_argument("--const-values", help="Optional dictionary of parameter names and their constant values (in JSON format)")
-        
-        args = parser.parse_args()
-        
-        # Process headers into a dictionary if provided
-        additional_headers = {}
-        if args.headers:
-            for header in args.headers:
-                try:
-                    key, value = header.split(':', 1)
-                    additional_headers[key.strip()] = value.strip()
-                except ValueError:
-                    logger.warning(f"Ignoring invalid header format: {header}. Headers should be in 'key:value' format.")
-        
-        # Process const values into a dictionary if provided
-        const_values = None
-        if args.const_values:
-            try:
-                const_values = json.loads(args.const_values)
-            except json.JSONDecodeError:
-                logger.error(f"Failed to parse const values: {args.const_values}")
-                raise
+        args, additional_headers, const_values = parse_args("Start an MCP server based on an OpenAPI/Swagger specification")
         
         run_server(
             openapi_spec=args.spec,
