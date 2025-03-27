@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from sample_rest_api.app.database import database, categories, products
+from sample_rest_api.app.logger import logger
 
 # Sample data for seeding the database
 sample_categories = [
@@ -97,10 +98,10 @@ async def seed_data():
     existing_categories = await database.fetch_all(query)
     
     if existing_categories:
-        print("Database already has data, skipping seed")
+        logger.info("Database already has data, skipping seed")
         return
     
-    print("Seeding database with initial data...")
+    logger.info("Seeding database with initial data...")
     
     # Insert categories
     for category in sample_categories:
@@ -113,4 +114,4 @@ async def seed_data():
         query = products.insert().values(**product)
         await database.execute(query)
     
-    print("Database seeded successfully!") 
+    logger.info("Database seeded successfully!") 

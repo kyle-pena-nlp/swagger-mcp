@@ -3,17 +3,10 @@ import databases
 import sqlalchemy
 from sqlalchemy import create_engine, MetaData
 from datetime import datetime
+from sample_rest_api.app.logger import logger
 
 # Default to file-based SQLite
-DATABASE_URL = "sqlite:///./test.db"
-
-# Use in-memory SQLite if MEMORY_DB is set to true
-if os.environ.get("MEMORY_DB", "").lower() in ("true", "1", "t", "yes"):
-    print("Using in-memory SQLite database")
-    # Special URI for shared in-memory database that persists throughout the application
-    DATABASE_URL = "sqlite:///file:memdb?mode=memory&cache=shared&uri=true"
-else:
-    print(f"Using file-based SQLite database: {DATABASE_URL}")
+DATABASE_URL = "sqlite:///file:memdb?mode=memory&cache=shared&uri=true"
 
 # SQLAlchemy database instance
 database = databases.Database(DATABASE_URL)

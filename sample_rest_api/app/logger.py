@@ -3,6 +3,8 @@ import os
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
+
+
 def setup_logger():
     """
     Configure and set up the logging system with file-based output
@@ -43,5 +45,31 @@ def setup_logger():
     
     return logger
 
-# Create a logger instance to be imported by other modules
-logger = setup_logger() 
+class NoOpLogger(logging.Logger):
+    def __init__(self, name):
+        self.name = name
+    
+    def debug(self, msg, *args, **kwargs):
+        pass
+    
+    def info(self, msg, *args, **kwargs):
+        pass
+    
+    def warning(self, msg, *args, **kwargs):
+        pass
+    
+    def error(self, msg, *args, **kwargs):
+        pass
+    
+    def critical(self, msg, *args, **kwargs):
+        pass
+    
+    def exception(self, msg, *args, **kwargs):
+        pass
+
+    
+# Return a no-op logger unless REAL_LOGGER is set to 'true'
+if os.getenv('REAL_LOGGER', '').lower() != 'true':
+    logger = NoOpLogger("product_category_api")
+else:
+    logger = setup_logger()

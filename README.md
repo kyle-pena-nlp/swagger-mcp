@@ -9,7 +9,7 @@
                       |___/ |___/                                
 ```
 
-Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other AI tools.
+Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, or other AI tools.
 
 ## Quickstart
 
@@ -55,6 +55,8 @@ Also note the `--cursor` flag.
 ### Windsurf
 Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
 ```json
+{
+  "mcpServers": {
     "product-mcp": {
       "command": "swagger-mcp",
       "args": [
@@ -64,28 +66,9 @@ Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Setti
         "Product MCP",
         "--server-url",
         "http://localhost:9000"
-      ] 
+      ]
     }
-``` 
-
-### Claude
-Edit `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
-
-```json
-{
-    "mcpServers": {
-        "product-mcp": {
-            "command": "swagger-mcp",
-            "args": [
-                "--spec",
-                "http://localhost:9000/openapi.json",
-                "--name",
-                "Product MCP",
-                "--server-url",
-                "http://localhost:9000"
-            ]
-        }
-    }
+  }
 }
 ```
 
@@ -100,30 +83,37 @@ Ask your AI agent to list, create, update, and delete products and categories.
     * /path/to/openapi.yaml
     * https://api.example.com/openapi.json
 
-2. Filter endpoints: Only include endpoints by path:
-This will regex search the endpoint paths and only include those that match the pattern.
+2. Filter endpoints: Only include endpoints where the path matches the regex pattern:
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --include-pattern category
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --include-pattern category --cursor
 ```
 
-3. Filter endpoints: Exclude endpoints by path:
-This will exclude any endpoints that match the regex pattern.
+3. Filter endpoints: Exclude endpoints where the path matches the regex pattern:
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --exclude-pattern product
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --exclude-pattern product --cursor
 ```
 
 4. Authentication
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --bearer-token "your-token-here"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --bearer-token "your-token-here" --cursor
 ```
 
 5. Custom headers
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --header X-Some-Header:your-value --header X-Some-Other-Header:your-value
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --header X-Some-Header:your-value --header X-Some-Other-Header:your-value --cursor
 ```
 
 6. Server URLs
-If the OpenAPI spec already contains a specific server URL, you don't have to provide it as a command line argument.  The command line argument overrides all endpoints.
+If the OpenAPI spec already contains a specific server URL, you don't have to provide it as a command line argument.  But if you do, the command line `--server-url` overrides all endpoints.
+
+7. Constant Values
+
+If you want to always automatically provide a value for a parameter, you can use the `--const` option.
+You can include as many `--const` options as you need.
+
+```bash
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --const parameter-name:your-value --const parameter-name2:your-value2 --cursor
+```
 
 ## Supported Features
 - All HTTP methods (GET, POST, PUT, DELETE, etc.)
@@ -152,6 +142,9 @@ If the OpenAPI spec already contains a specific server URL, you don't have to pr
 - `--additional-headers`: JSON string of additional headers to include in all requests
 - `--include-pattern`: Regex pattern to include only specific endpoint paths (e.g., "/api/v1/.*")
 - `--exclude-pattern`: Regex pattern to exclude specific endpoint paths (e.g., "/internal/.*")
+- `--header`: key:value pair of an extra header to include with all requests. Can be included multiple times.
+- `--const`: key:value pair of a constant value to always use for a parameter, if the parameter is present on the endpoint (can be a path variable, query parameter, top-level request body property, or multi-part form data field). Can be included multiple times to specify multiple const values.
+- `--cursor`: Run in cursor mode
 
 ## Authentication
 
@@ -159,10 +152,17 @@ For APIs requiring authentication:
 
 ```bash
 # Using bearer token
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --bearer-token "your-token-here"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --bearer-token "your-token-here" --cursor
 
 # Using custom headers
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --additional-headers '{"X-API-Key": "your-key"}'
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --additional-headers '{"X-API-Key": "your-key"}' --cursor
+```
+
+## Other Fun Servers You Can Try:
+
+```bash
+# Petstore 
+swagger-mcp --spec https://petstore.swagger.io/v2/swagger.json --name petstore-mcp --server-url https://petstore.swagger.io/v2 --cursor
 ```
 
 ## For Developers
@@ -209,3 +209,10 @@ bash scripts/inspector.sh
 Click "Connect" and then "List Tools" to begin interacting with your MCP Server.
 
 ![MCP Inspector](images/mcp-inspector.png)
+
+### Logging
+
+To run the server with logs enabled, set the `REAL_LOGGER` environment variable to `true`:
+```bash
+REAL_LOGGER=true swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000
+```
