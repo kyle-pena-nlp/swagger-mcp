@@ -38,8 +38,9 @@ class OpenAPIMCPServer:
         server_version: Optional[str] = "1.0.0",
         instructions: Optional[str] = None,
         additional_headers: Optional[Dict[str, str]] = None,
-        path_filter: Optional[str] = None,
-        exclude_pattern: Optional[str] = None
+        include_pattern: Optional[str] = None,
+        exclude_pattern: Optional[str] = None,
+        cursor_mode: bool = False
     ):
         """
         Initialize the OpenAPI MCP Server.
@@ -52,16 +53,18 @@ class OpenAPIMCPServer:
             server_version: Optional server version
             instructions: Optional instructions for the server
             additional_headers: Optional dictionary of additional headers to include in all requests
-            path_filter: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
+            include_pattern: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
             exclude_pattern: Optional regex pattern to exclude endpoints by path (e.g., "/internal/.*")
+            cursor_mode: Whether to enable Cursor-specific quirk handling
         """
         self.server_name = server_name
         self.server_version = server_version or "1.0.0"  # Ensure server_version is not None
         self.server_url = server_url
         self.bearer_token = bearer_token
         self.additional_headers = additional_headers or {}
-        self.path_filter = path_filter
+        self.include_pattern = include_pattern
         self.exclude_pattern = exclude_pattern
+        self.cursor_mode = cursor_mode
         
         # Create the MCP server
         self.server = Server(
@@ -121,16 +124,17 @@ class OpenAPIMCPServer:
                 if endpoint.deprecated:
                     continue
                 
-                # Apply path filter and exclude pattern if specified
-                if self.path_filter or self.exclude_pattern:
+                # Apply include and exclude patterns if specified
+                if self.include_pattern or self.exclude_pattern:
                     
                     # Check exclude pattern first - if path matches exclude pattern, skip this endpoint
                     if self.exclude_pattern and re.search(self.exclude_pattern, endpoint.path):
                         logger.info(f"Excluding endpoint {endpoint.path} due to exclude pattern")
                         continue
                     
-                    # If path filter is specified and path doesn't match, skip this endpoint
-                    if self.path_filter and not re.search(self.path_filter, endpoint.path):
+                    # If include pattern is specified and path doesn't match, skip this endpoint
+                    if self.include_pattern and not re.search(self.include_pattern, endpoint.path):
+                        logger.info(f"Excluding endpoint {endpoint.path} due to include pattern")
                         continue
                 
                 # Create input schema from the endpoint's combined parameter schema
@@ -142,6 +146,13 @@ class OpenAPIMCPServer:
                 
                 if endpoint.combined_parameter_schema and 'properties' in endpoint.combined_parameter_schema:
                     input_schema["properties"] = endpoint.combined_parameter_schema['properties']
+                    
+                    # In cursor mode, remove parameter descriptions
+                    if self.cursor_mode and isinstance(input_schema["properties"], dict):
+                        for param in input_schema["properties"].values():
+                            if isinstance(param, dict) and "description" in param:
+                                del param["description"]
+                    
                     if 'required' in endpoint.combined_parameter_schema:
                         input_schema["required"] = endpoint.combined_parameter_schema['required']
                 
@@ -240,8 +251,9 @@ def run_server(
     server_url: Optional[str] = None,
     bearer_token: Optional[str] = None,
     additional_headers: Optional[Dict[str, str]] = None,
-    path_filter: Optional[str] = None,
-    exclude_pattern: Optional[str] = None
+    include_pattern: Optional[str] = None,
+    exclude_pattern: Optional[str] = None,
+    cursor_mode: bool = False
 ):
     """
     Run an OpenAPI MCP Server with the given parameters.
@@ -252,14 +264,15 @@ def run_server(
         server_url: Base URL for API calls (overrides servers in spec)
         bearer_token: Optional bearer token for authenticated requests
         additional_headers: Optional dictionary of additional headers to include in all requests
-        path_filter: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
+        include_pattern: Optional regex pattern to filter endpoints by path (e.g., "/admin/.*" or "/api/v1")
         exclude_pattern: Optional regex pattern to exclude endpoints by path (e.g., "/internal/.*")
+        cursor_mode: Whether to enable Cursor-specific quirk handling
     """
     logger.info(f"Starting OpenAPI MCP Server: {server_name}")
     logger.info(f"OpenAPI spec: {openapi_spec}")
     logger.info(f"Server URL: {server_url}")
-    if path_filter:
-        logger.info(f"Path filter: {path_filter}")
+    if include_pattern:
+        logger.info(f"Include pattern: {include_pattern}")
     if exclude_pattern:
         logger.info(f"Exclude pattern: {exclude_pattern}")
     if additional_headers:
@@ -271,8 +284,9 @@ def run_server(
         server_url=server_url,
         bearer_token=bearer_token,
         additional_headers=additional_headers,
-        path_filter=path_filter,
-        exclude_pattern=exclude_pattern
+        include_pattern=include_pattern,
+        exclude_pattern=exclude_pattern,
+        cursor_mode=cursor_mode
     )
     
     logger.info("Server initialized, starting main loop")
@@ -288,8 +302,9 @@ def main():
         parser.add_argument("--server-url", help="Base URL for API calls (overrides servers defined in spec)")
         parser.add_argument("--bearer-token", help="Bearer token for authenticated requests")
         parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
-        parser.add_argument("--path-filter", help="Regex pattern to include only specific endpoint paths (e.g., '/api/v1/.*')")
+        parser.add_argument("--include-pattern", help="Regex pattern to include only specific endpoint paths (e.g., '/api/v1/.*')")
         parser.add_argument("--exclude-pattern", help="Regex pattern to exclude specific endpoint paths (e.g., '/internal/.*')")
+        parser.add_argument("--cursor", action='store_true', help="Run the server in Cursor mode to deal with Cursor quirks")
         
         args = parser.parse_args()
         
@@ -309,9 +324,10 @@ def main():
             server_url=args.server_url,
             bearer_token=args.bearer_token,
             additional_headers=additional_headers if additional_headers else None,
-            path_filter=args.path_filter,
-            exclude_pattern=args.exclude_pattern
-            ) 
+            include_pattern=args.include_pattern,
+            exclude_pattern=args.exclude_pattern,
+            cursor_mode=args.cursor
+        ) 
     except Exception as e:
         logger.error(f"Server failed to start: {str(e)}", exc_info=True)
         raise

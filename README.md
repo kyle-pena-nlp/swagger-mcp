@@ -45,10 +45,12 @@ We'll use this sample server to show how to configure an MCP server in Cursor, W
 ### Cursor
 Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --cursor
 ```
 
 **Please Note**: *In Cursor, you may need to replace `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
+
+Also note the `--cursor` flag.
 
 ### Windsurf
 Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
@@ -101,13 +103,13 @@ Ask your AI agent to list, create, update, and delete products and categories.
 2. Filter endpoints: Only include endpoints by path:
 This will regex search the endpoint paths and only include those that match the pattern.
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --include-pattern "category"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --include-pattern category
 ```
 
 3. Filter endpoints: Exclude endpoints by path:
 This will exclude any endpoints that match the regex pattern.
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --exclude-pattern "product"
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --exclude-pattern product
 ```
 
 4. Authentication
@@ -117,7 +119,7 @@ swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --serve
 
 5. Custom headers
 ```bash
-swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --additional-headers '{"X-API-Key": "your-key"}'
+swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000 --header X-Some-Header:your-value --header X-Some-Other-Header:your-value
 ```
 
 6. Server URLs
@@ -130,6 +132,7 @@ If the OpenAPI spec already contains a specific server URL, you don't have to pr
 - Textual Multi-Part Request Body Fields
 - JSON Request body
 - Bearer Token Authentication
+- Custom Headers
 
 ## Limitations
 
