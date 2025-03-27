@@ -11,7 +11,17 @@ dependencies = [
     "httpx>=0.28.1",
     "mcp[cli]>=1.2.0",
     "requests>=2.31.0",
-    "PyYAML~=5.3.1"
+    "PyYAML~=5.3.1",
+
+    # Sample Server stuff
+    "fastapi>=0.95.1",
+    "uvicorn>=0.34.0",
+    "pydantic>=2.10.6",
+    "typing-extensions>=4.12.2",
+    "sqlalchemy>=1.4.48",
+    "databases[sqlite]>=0.7.0",
+    "aiosqlite>=0.18.0",
+    "python-multipart>=0.0.5",
 ]
 classifiers = [
     "Development Status :: 3 - Alpha",
@@ -27,16 +37,6 @@ urls = {Homepage = "https://github.com/context-labs/swagger-mcp"}
 
 [project.optional-dependencies]
 dev = [
-    # Core dependencies
-    "fastapi>=0.95.1",
-    "uvicorn>=0.34.0",
-    "pydantic>=2.10.6",
-    "typing-extensions>=4.12.2",
-    "sqlalchemy>=1.4.48",
-    "databases[sqlite]>=0.7.0",
-    "aiosqlite>=0.18.0",
-    "python-multipart>=0.0.5",
-    
     # Testing
     "pytest>=8.1.1",
     "pytest-asyncio>=0.23.5.post1",
@@ -71,7 +71,7 @@ dev = [
 
 [project.scripts]
 swagger-mcp = "swagger_mcp.openapi_mcp_server:main"
-swagger-mcp-sample = "sample_rest_api.run:run_cli"
+swagger-mcp-sample-server = "sample_rest_api.run:run_cli"
 
 [build-system]
 requires = [

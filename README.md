@@ -18,12 +18,23 @@ Install using pipx (recommended):
 pipx install swagger-mcp
 ```
 
-Spin up a simple API on your local machine on port 9000 for products and product categories:
+Or install from source:
 ```bash
-swagger-mcp-sample
+bash scripts/install-global.sh
 ```
 
-Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the server is running.
+Confirm the installation succeeded:
+```bash
+which swagger-mcp
+which swagger-mcp-sample-server
+```
+
+Spin up a sample "products and product categories" API on your local machine on port 9000:
+```bash
+swagger-mcp-sample-server
+```
+
+Visit [http://localhost:9000/docs](http://localhost:9000/docs) to confirm the sample server is running.
 
 
 ### Cursor
@@ -56,7 +67,7 @@ Edit `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 ```json
 {
     "mcpServers": {
-        "my-api-server": {
+        "product-mcp": {
             "command": "swagger-mcp",
             "args": [
                 "--spec",
@@ -73,14 +84,14 @@ Edit `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 
 That's it! Your API is now accessible through Windsurf, Cursor, or Claude as a set of AI-friendly tools.
 
+Ask your AI agent to list, create, update, and delete products and categories.
+
 ## Additional Options
 
 1. You can pass a JSON file, YAML file, or URL for the `--spec` option:
-
-i.e.;
-* /path/to/openapi.json
-* /path/to/openapi.yaml
-* https://api.example.com/openapi.json
+    * /path/to/openapi.json
+    * /path/to/openapi.yaml
+    * https://api.example.com/openapi.json
 
 2. Filter endpoints: Only include endpoints by path:
 This will regex search the endpoint paths and only include those that match the pattern.

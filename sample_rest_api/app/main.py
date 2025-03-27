@@ -12,6 +12,10 @@ from sample_rest_api.app.database import database, create_tables, categories, pr
 from sample_rest_api.app.seed import seed_data
 from sample_rest_api.app.logger import logger
 
+
+def get_port():
+    return int(os.environ.get("API_PORT", 9000))
+
 # Create FastAPI app with lifespan
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -25,6 +29,7 @@ async def lifespan(app: FastAPI):
     logger.info("Seeding initial data")
     await seed_data()
     logger.info("Application startup completed")
+    logger.info(f"---> http://localhost:{get_port()}/docs <---")
     
     yield
     
@@ -36,7 +41,7 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(
     title="Product-Category API",
-    description="A simple REST API for managing products and categories",
+    description="A simple REST API for managing products and categories - a sample server for SwaggerMCP! Follow the README to integrate with your favorite IDE.",
     version="1.0.0",
     lifespan=lifespan
 )
@@ -408,7 +413,8 @@ async def search_products(
         "search_metadata": search_metadata
     }
 
+
 if __name__ == "__main__":
-    port = int(os.environ.get("API_PORT", 9000))
+    port = get_port()
     logger.info(f"Starting server on port {port}")
     uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True) 
