@@ -1,13 +1,4 @@
-```
-   _____                                    __  __  _____ _____  
-  / ____|                                  |  \/  |/ ____|  __ \ 
- | (_____      ____ _  __ _  __ _  ___ _ __| \  / | |    | |__) |
-  \___ \ \ /\ / / _` |/ _` |/ _` |/ _ \ '__| |\/| | |    |  ___/ 
-  ____) \ V  V / (_| | (_| | (_| |  __/ |  | |  | | |____| |     
- |_____/ \_/\_/ \__,_|\__, |\__, |\___|_|  |_|  |_|\_____|_|     
-                       __/ | __/ |                               
-                      |___/ |___/                                
-```
+# Swagger MCP
 
 Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, or other tools.
 
