@@ -10,12 +10,6 @@ source "$SCRIPT_DIR/setup_dev_venv.sh"
 
 # Ensure the openapi.json spec is available on http://localhost:9000/openapi.json by sending a test request
 # exit if not.
-curl -s http://localhost:9000/openapi.json > /dev/null || { echo "Error: openapi.json spec not found at http://localhost:9000/openapi.json"; exit 1; }
+curl -s http://localhost:9000/openapi.json > /dev/null || { echo "Error: openapi.json spec not found at http://localhost:9000/openapi.json - run bash scripts/sample-rest-api.sh first"; exit 1; }
 
-# Start the MCP server in a separate process
-python "$PROJECT_ROOT/swagger_mcp/openapi_mcp_server.py" http://localhost:9000/openapi.json --name product-mcp &
-
-# Wait for the MCP server to start
-sleep 1
-
-
+npx @modelcontextprotocol/inspector swagger-mcp --spec http://localhost:9000/openapi.json --name product-mcp --server-url http://localhost:9000

@@ -282,16 +282,14 @@ def run_server(
 def main():
     try:
         # Simple CLI to start the server
-
-        
-        parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI spec")
-        parser.add_argument("spec", help="Path or URL to the OpenAPI specification file (JSON or YAML)", nargs="?")
-        parser.add_argument("--name", help="Server name")
-        parser.add_argument("--url", help="Base URL for API calls (overrides servers in spec)")
-        parser.add_argument("--token", help="Bearer token for authenticated requests")
+        parser = argparse.ArgumentParser(description="Start an MCP server based on an OpenAPI/Swagger specification")
+        parser.add_argument("--spec", required=True, help="Path or URL to your OpenAPI/Swagger specification")
+        parser.add_argument("--name", required=True, help="Name for your MCP server (shows up in Windsurf/Cursor)")
+        parser.add_argument("--server-url", help="Base URL for API calls (overrides servers defined in spec)")
+        parser.add_argument("--bearer-token", help="Bearer token for authenticated requests")
         parser.add_argument("--header", action='append', help="Additional headers in the format 'key:value'. Can be specified multiple times.", dest='headers')
-        parser.add_argument("--path-filter", help="Filter endpoints by path pattern (e.g., '/admin/.*' or '/api/v1')")
-        parser.add_argument("--exclude-pattern", help="Exclude endpoints by path pattern (e.g., '/internal/.*')")
+        parser.add_argument("--path-filter", help="Regex pattern to include only specific endpoint paths (e.g., '/api/v1/.*')")
+        parser.add_argument("--exclude-pattern", help="Regex pattern to exclude specific endpoint paths (e.g., '/internal/.*')")
         
         args = parser.parse_args()
         
@@ -308,8 +306,8 @@ def main():
         run_server(
             openapi_spec=args.spec,
             server_name=args.name,
-            server_url=args.url,
-            bearer_token=args.token,
+            server_url=args.server_url,
+            bearer_token=args.bearer_token,
             additional_headers=additional_headers if additional_headers else None,
             path_filter=args.path_filter,
             exclude_pattern=args.exclude_pattern
