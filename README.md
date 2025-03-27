@@ -10,7 +10,7 @@
 ```
 # Swagger MCP
 
-Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other IDEs. This tool enables AI agents to interact with your API endpoints through natural language, making API integration seamless and intuitive.
+Automatically convert any Swagger/OpenAPI specification into an MCP server for use with Windsurf, Cursor, and other AI tools. This package enables AI agents to interact with your API endpoints through natural language, making API integration seamless and intuitive.
 
 ## Quickstart
 
@@ -19,14 +19,16 @@ Install using pipx (recommended):
 pipx install swagger-mcp
 ```
 
-**Cursor**: Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
+### Cursor
+Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
 ```bash
 swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com
 ```
 
 **Please Note**: *In Cursor, you may need to replace `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
 
-**Windsurf**: Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
+### Windsurf
+Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
 ```json
     "product-mcp": {
       "command": "swagger-mcp",
@@ -41,7 +43,8 @@ swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url htt
     }
 ``` 
 
-**Claude**: Edit `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
+### Claude
+Edit `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
 
 ```json
 {
@@ -107,6 +110,7 @@ If the OpenAPI spec already contains a specific server URL, you don't have to pr
 
 ## Limitations
 
+- If you find a Swagger API specification that is not supported, please file an issue. We will add support for it as needed / requested.
 - We do not support Swagger/OpenAPI specifications spread across multiple files (i.e.; fragments, extensions, etc.).
 - We do not support path variable substitution in the base server URLs (but we *do* support path variable in the endpoint paths).
 - We do not support automatic OAuth workflow execution.  If the OAuth workflow ends in a bearer token, you must provide this bearer token as a command line argument.
