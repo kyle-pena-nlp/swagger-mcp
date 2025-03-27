@@ -19,14 +19,14 @@ Install using pipx (recommended):
 pipx install swagger-mcp
 ```
 
-Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
+**Cursor**: Configure an MCP server in Cursor (Top Right Settings -> MCP -> Add New MCP Server -> Command Server):
 ```bash
 swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com
 ```
 
 **Please Note**: *In Cursor, you may need to replace `swagger-mcp` with the full path to the `swagger-mcp` executable, which you can find by running `which swagger-mcp`.*
 
-Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
+**Windsurf**: Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
 ```json
     "product-mcp": {
       "command": "swagger-mcp",
@@ -41,31 +41,60 @@ Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Setti
     }
 ``` 
 
-That's it! Your API is now accessible through Windsurf and Cursor as a set of AI-friendly tools.
+**Claude**: Edit `~/Library/Application\ Support/Claude/claude_desktop_config.json`:
+
+```json
+{
+    "mcpServers": {
+        "my-api-server": {
+            "command": "swagger-mcp",
+            "args": [
+                "--spec",
+                "/path/to/openapi.yaml",
+                "--name",
+                "My API Server",
+                "--server-url",
+                "http://localhost:9000"
+            ]
+        }
+    }
+}
+```
+
+That's it! Your API is now accessible through Windsurf, Cursor, or Claude as a set of AI-friendly tools.
 
 ## Additional Options
 
-1. Filter by path
+1. You can pass a JSON file, YAML file, or URL for the `--spec` option:
+
+i.e.;
+* /path/to/openapi.json
+* /path/to/openapi.yaml
+* https://api.example.com/openapi.json
+
+2. Filter endpoints: Only include endpoints by path:
+This will regex search the endpoint paths and only include those that match the pattern.
 ```bash
-swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com --path-filter "/api/v1/.*"
+swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com --include-pattern "apples|oranges"
 ```
 
-2. Exclude by path
+3. Filter endpoints: Exclude endpoints by path:
+This will exclude any endpoints that match the regex pattern.
 ```bash
-swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com --exclude-pattern "/api/v1/.*"
+swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com --exclude-pattern "grapes|bananas"
 ```
 
-3. Authentication
+4. Authentication
 ```bash
 swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com --bearer-token "your-token-here"
 ```
 
-4. Custom headers
+5. Custom headers
 ```bash
 swagger-mcp --spec /path/to/openapi.yaml --name "My API Server" --server-url https://api.example.com --additional-headers '{"X-API-Key": "your-key"}'
 ```
 
-5. Server URLs
+6. Server URLs
 If the OpenAPI spec already contains a specific server URL, you don't have to provide it as a command line argument.  The command line argument overrides all endpoints.
 
 ## Supported Features
@@ -91,7 +120,7 @@ If the OpenAPI spec already contains a specific server URL, you don't have to pr
 - `--server-url`: Base URL for API calls (overrides servers defined in spec)
 - `--bearer-token`: Bearer token for authenticated requests
 - `--additional-headers`: JSON string of additional headers to include in all requests
-- `--path-filter`: Regex pattern to include only specific endpoint paths (e.g., "/api/v1/.*")
+- `--include-pattern`: Regex pattern to include only specific endpoint paths (e.g., "/api/v1/.*")
 - `--exclude-pattern`: Regex pattern to exclude specific endpoint paths (e.g., "/internal/.*")
 
 ## Authentication
