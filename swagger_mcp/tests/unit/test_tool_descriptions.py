@@ -68,7 +68,7 @@ async def test_tool_schema_properties(server):
         elif tool.name == "uploadFile":
             assert "petId" in properties, "uploadFile should have 'petId' parameter"
             assert "additionalMetadata" in properties, "uploadFile should have 'additionalMetadata' parameter"
-            assert "file" in properties, "uploadFile should have 'file' parameter"
+            assert "file" not in properties, "uploadFile should not have 'file' parameter because of invalid 'file' parameter type"
             
         # General schema validation
         for param_name, param_schema in properties.items():

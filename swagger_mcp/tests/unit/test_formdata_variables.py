@@ -1,53 +1,76 @@
 import pytest
 from unittest.mock import patch, MagicMock
 from swagger_mcp.openapi_mcp_server import OpenAPIMCPServer
+from swagger_mcp.openapi_parser import OpenAPIParser
+
+openapi_spec = {
+    "openapi": "3.0.0",
+    "info": {
+        "title": "File Upload API",
+        "version": "1.0.0"
+    },
+    "servers": [{"url": "https://api.example.com"}],
+    "paths": {
+        "/upload": {
+            "post": {
+                "operationId": "uploadFile",
+                "summary": "Upload a file with metadata",
+                "requestBody": {
+                    "required": True,
+                    "content": {
+                        "multipart/form-data": {
+                            "schema": {
+                                "type": "object",
+                                "required": ["description"],
+                                "properties": {
+                                    "description": {
+                                        "type": "string"
+                                    },
+                                    "tags": {
+                                        "type": "array",
+                                        "items": {"type": "string"}
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "File uploaded successfully"
+                    }
+                }
+            }
+        },
+        "/upload2": {
+            "post": {
+                "operationId": "uploadFile2",
+                "summary": "Upload a file with a file type parameter",
+                "consumes": ["multipart/form-data"],
+                "produces": ["application/json"],
+                "parameters": [
+                    {
+                        "name": "file",
+                        "in": "formData",
+                        "required": True,
+                        "type": "file"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "File uploaded successfully"
+                    }
+                }
+            }
+        }              
+    }
+}
+        
 
 class TestFormDataVariables:
     @pytest.fixture
     def server(self):
         # Define a simple OpenAPI spec with multipart form data
-        openapi_spec = {
-            "openapi": "3.0.0",
-            "info": {
-                "title": "File Upload API",
-                "version": "1.0.0"
-            },
-            "servers": [{"url": "https://api.example.com"}],
-            "paths": {
-                "/upload": {
-                    "post": {
-                        "operationId": "uploadFile",
-                        "summary": "Upload a file with metadata",
-                        "requestBody": {
-                            "required": True,
-                            "content": {
-                                "multipart/form-data": {
-                                    "schema": {
-                                        "type": "object",
-                                        "required": ["description"],
-                                        "properties": {
-                                            "description": {
-                                                "type": "string"
-                                            },
-                                            "tags": {
-                                                "type": "array",
-                                                "items": {"type": "string"}
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        },
-                        "responses": {
-                            "200": {
-                                "description": "File uploaded successfully"
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        
         server = OpenAPIMCPServer('Test Server', openapi_spec)
         return server
 
@@ -100,3 +123,10 @@ class TestFormDataVariables:
         # Check that both file and regular form fields are present
         assert "data" in call_args
         assert call_args["data"]["description"] == "Test with tags"
+
+    @pytest.mark.asyncio
+    @patch('swagger_mcp.endpoint_invoker.requests.request')
+    async def test_multipart_form_data_with_parameter_of_type_file_not_in_endpoints(self, mock_request, server):
+        parser = OpenAPIParser(openapi_spec)
+        endpoints = parser.endpoints
+        assert "uploadFile2" not in endpoints

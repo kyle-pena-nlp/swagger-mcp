@@ -17,6 +17,13 @@ class CircularReferenceError(ValueError):
         This method exists purely for testing purposes."""
         pass
 
+class InvalidParameterTypeError(ValueError):
+    """Raised when a parameter type is invalid."""
+    def record_occurrence(self, param_name: str, param_type: str) -> None:
+        """Record that this error occurred for a specific parameter.
+        This method exists purely for testing purposes."""
+        pass
+
 class OpenAPIParser:
     """
     A class for parsing OpenAPI specifications and extracting endpoint information,
@@ -320,6 +327,10 @@ class OpenAPIParser:
                     for field in ['format', 'enum', 'default', 'minimum', 'maximum', 'pattern']:
                         if field in param:
                             param_schema[field] = param[field]
+                    
+                    # Validate that the parameter type is a valid JSON Schema type
+                    self._assert_is_valid_parameter_type(param_schema)
+                
                 
                 # Try to resolve any schema references
                 if isinstance(param_schema, dict) and '$ref' in param_schema:
@@ -343,6 +354,15 @@ class OpenAPIParser:
                     # If an optional parameter has a circular reference, just skip that parameter
                     logger.warning(f"Optional parameter {param_name} has circular reference, omitting parameter")
                     continue
+            except InvalidParameterTypeError as e:
+                if is_required:
+                    # If a required parameter has an invalid type, skip the entire endpoint
+                    logger.warning(f"Required parameter {param_name} has invalid type: {str(e)}, skipping endpoint")
+                    return None
+                else:
+                    # If an optional parameter has an invalid type, just skip that parameter
+                    logger.warning(f"Optional parameter {param_name} has invalid type: {str(e)}, omitting parameter")
+                    continue
             except ValueError as e:
                 if is_required:
                     # If a required parameter has any other error, skip the entire endpoint
@@ -358,6 +378,17 @@ class OpenAPIParser:
             del schema['required']
         
         return schema
+    
+    def _assert_is_valid_parameter_type(self, param_schema: Dict[str, Any]) -> None:
+        """
+        Validate that the parameter type is valid.
+        """
+        param_schema_type = param_schema.get('type', '')
+        if isinstance(param_schema_type, str) and param_schema_type not in ['string', 'number', 'integer', 'boolean', 'array', 'object']:
+            raise InvalidParameterTypeError(f"Invalid parameter type: {param_schema_type}")
+        elif isinstance(param_schema_type, list):
+            for item in param_schema_type:
+                self._assert_is_valid_parameter_type({ "type": item })
 
     def _parse_endpoints(self) -> Dict[str, Endpoint]:
         """

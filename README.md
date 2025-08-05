@@ -4,6 +4,8 @@ Automatically convert a Swagger/OpenAPI specification into an MCP server for use
 
 ## Quickstart
 
+`swagger-mcp` uses `pipx` 
+
 Install from PyPI using pipx (recommended):
 ```bash
 brew install pipx
@@ -36,7 +38,7 @@ We'll use this sample server to show how to configure an MCP server in Windsurf.
 **Make sure the sample server is running before following the Windsurf or Cursor instructions below.**
 
 ### Windsurf
-Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Settings -> Cascade -> Add Server -> Add Custom Server):
+Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Cascade -> Manage Plugins -> View Raw Config):
 ```json
 {
   "mcpServers": {
@@ -46,7 +48,7 @@ Start an MCP Server in Windsurf (Windsurf Settings -> Settings -> Windsurf Setti
         "--spec",
         "http://localhost:9000/openapi.json",
         "--name",
-        "Product MCP",
+        "Product-MCP",
         "--server-url",
         "http://localhost:9000"
       ]
@@ -63,7 +65,7 @@ Ask your AI agent to list, create, update, and delete products and categories.
 
 ### Cursor (>=v0.46)
 
-Support for Cursor is still in beta as Cursor MCP integration matures.  Windsurf is currently the preferred experience.
+Support for Cursor is still in beta as Cursor MCP integration matures.  Windsurf is currently the preferred experience. To add a custom MCP server in Cursor, go to Settings -> Cursor Settings -> Tools & Integrations -> Add Custom MCP.
 
 ```json
 {
@@ -74,7 +76,7 @@ Support for Cursor is still in beta as Cursor MCP integration matures.  Windsurf
         "--spec",
         "http://localhost:9000/openapi.json",
         "--name",
-        "Product MCP",
+        "Product-MCP",
         "--server-url",
         "http://localhost:9000",
         "--cursor"
@@ -230,7 +232,7 @@ You can include as many `--const` options as you need.
 ## Limitations
 
 - Endpoints that have recursive schema references are not yet supported.
-- Cursor MCP integration is very early and frankly broken.  (It does not like double quotes in the command line arguments.  It does not like dashes in tool names.  Sometimes, parameter descriptions cause silent errors).  I try to address some of these with cursor mode `--cursor`, but it's still not great.  Until Cursor MCP support gets better, you'll be happier with Windsurf.
+- Cursor MCP integration is very early and frankly broken.  I try to address some of these with cursor mode `--cursor`, but it's still not great.  Until Cursor MCP support gets better, you'll be happier with Windsurf.
 - We will never support automatic OAuth workflow execution.  If the OAuth workflow creates a bearer token, you must obtain this token yourself by performing OAuth out-of-band, and provide this bearer token as a command line argument.
 - We do not support Swagger/OpenAPI specifications spread across multiple files (i.e.; fragments, extensions, etc.).
 - We do not support path variable substitution in server URLs (but we *do* support path variables in endpoints).
@@ -240,14 +242,6 @@ You can include as many `--const` options as you need.
 
 - If you have trouble spinning up a server, try the following command: `REAL_LOGGER=true swagger-mcp-parse-dry-run ...` and provide all the same arguments you would use to spin up a server. Include this information in any issue you file.
 - If you find a Swagger API specification that is not supported and you can't use any of the available parameters for a workaround, please file an issue. We will add support for it as needed / requested.
-
-
-## Roadmap
-
-- Support recursive schema references
-- Support path variable substitution in server URLs
-- Revamp the `--cursor` mode to better work around Cursor's limitations
-- Provide support for MCP resources
 
 ## Command Line Options
 
@@ -324,20 +318,34 @@ For APIs requiring authentication:
         "--server-url",
         "https://restcountries.com/",
         "--const",
-        "fields:name",
-        "--cursor"
+        "fields:name"
       ]
     }
   }
 }
 ```
 
-## TODO: PokeAPI
+## Petstore
 
-## TODO: Slack
-
-## TODO: Petstore
-
+```json
+{
+  "mcpServers": {
+    "petstore": {
+      "command": "swagger-mcp",
+      "args": [
+        "--spec",
+        "https://petstore.swagger.io/v2/swagger.json",
+        "--name",
+        "petstore",
+        "--server-url",
+        "https://petstore.swagger.io/v2",
+        "--header",
+        "X-API-Key:special-key",
+      ]
+    }
+  }
+}
+```
 
 ## For Developers
 
