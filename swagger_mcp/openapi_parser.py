@@ -43,8 +43,39 @@ class OpenAPIParser:
         self.security_schemes = self._parse_security_schemes()
         self.global_security = self.spec.get('security', [])
         self.has_bearer_schemes = self._has_bearer_schemes()
-        self.servers = self.spec.get('servers', [])
+        self.servers = self._extract_servers_from_spec()
         self.endpoints = self._parse_endpoints()
+
+    def _extract_servers_from_spec(self) -> List[Dict[str, Any]]:
+        """Return a list of servers that apply to the entire spec.
+
+        OpenAPI 3.x: take the ``servers`` array verbatim.
+        Swagger 2.0: build URLs from ``host``, optional ``basePath``, and each value in ``schemes``.
+        If ``schemes`` is missing, default to ``["http"]`` per spec.
+        """
+        # Prefer explicit v3-style servers list if present
+        if 'servers' in self.spec and isinstance(self.spec['servers'], list):
+            return self.spec['servers']
+
+        # Handle Swagger/OpenAPI v2
+        if self.spec.get('swagger') == '2.0':
+            host = self.spec.get('host', '')
+            base_path = self.spec.get('basePath', '') or ''
+            if host:
+                # Ensure base_path starts with a single '/'
+                if base_path and not base_path.startswith('/'):
+                    base_path = '/' + base_path
+                schemes = self.spec.get('schemes', ["http"])
+                servers: List[Dict[str, Any]] = []
+                for scheme in schemes or ["http"]:
+                    url = f"{scheme}://{host}{base_path}"
+                    # Remove trailing slash except root
+                    if base_path == '/':
+                        url = f"{scheme}://{host}"  # root path, keep clean
+                    servers.append({"url": url})
+                return servers
+        # Fallback: empty list
+        return []
 
     def _has_bearer_schemes(self) -> bool:
         """
@@ -274,6 +305,9 @@ class OpenAPIParser:
         return scheme.get('type') == 'oauth2'
         
     def _requires_oauth(self, security_requirements: List[Dict[str, Any]]) -> bool:
+        """Determine if a set of security requirements includes OAuth authentication."""
+        # (existing content unchanged)
+
         """
         Determine if a set of security requirements includes OAuth authentication.
         
@@ -291,6 +325,23 @@ class OpenAPIParser:
                 return True
                 
         return False
+
+    # ------------------------------------------------------------------
+    # Cookie security helpers
+    # ------------------------------------------------------------------
+    def _is_cookie_scheme(self, scheme_name: str) -> bool:
+        """Return True if the security scheme is an apiKey located in a cookie."""
+        scheme = self.security_schemes.get(scheme_name, {})
+        return scheme.get('type') == 'apiKey' and scheme.get('in') == 'cookie'
+
+    def _requires_cookie_only(self, security_requirements: List[Dict[str, Any]]) -> bool:
+        """Return True if every alternative security requirement relies solely on cookie schemes."""
+        if not security_requirements:
+            return False
+        for requirement in security_requirements:
+            if any(not self._is_cookie_scheme(name) for name in requirement):
+                return False
+        return True
 
     def _build_parameters_schema(self, parameters: List[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         """
@@ -403,8 +454,7 @@ class OpenAPIParser:
         # Get the global security requirements
         self.global_security = self.spec.get('security', [])
         
-        # Get the global servers list
-        self.servers = self.spec.get('servers', [])
+        # self.servers already determined in __init__, no need to reset
         
         # Process each path
         for path, path_item in self.spec.get('paths', {}).items():
@@ -449,6 +499,11 @@ class OpenAPIParser:
                         if endpoint.requires_oauth:
                             endpoint.oauth_scopes = self._get_oauth_scopes(self.global_security)
                     
+                    # Skip endpoints that require only cookie-based authentication
+                    if self._requires_cookie_only(endpoint.security_requirements):
+                        logger.info(f"Skipping endpoint {method.upper()} {path} due to cookie-only auth")
+                        continue
+
                     # Process parameters
                     operation_params = operation.get('parameters', [])
                     all_params = path_level_params + operation_params
@@ -458,6 +513,7 @@ class OpenAPIParser:
                     query_params = []
                     header_params = []
                     form_params = []
+                    body_param = None
                     
                     skip_endpoint = False
                     for param in all_params:
@@ -490,6 +546,8 @@ class OpenAPIParser:
                             header_params.append(param)
                         elif param_in == 'formData':
                             form_params.append(param)
+                        elif param_in == 'body':
+                            body_param = param
                     
                     # Skip this endpoint if any required parameters had errors
                     if skip_endpoint:
@@ -523,7 +581,17 @@ class OpenAPIParser:
                                 logger.warning(f"Skipping endpoint {method.upper()} {path} due to form parameter errors")
                                 continue
                         
-                        # Process request body
+                        # Handle Swagger 2.0 body parameter ("in": "body")
+                        if body_param is not None:
+                            endpoint.request_body_required = body_param.get('required', False)
+                            schema = body_param.get('schema', {})
+                            if schema:
+                                endpoint.request_body_schema = schema  # already resolved earlier if needed
+                            consumes = operation.get('consumes') or self.spec.get('consumes', [])
+                            if consumes:
+                                endpoint.request_content_types = list(consumes)
+
+                        # Process request body (OpenAPI 3.x style)
                         request_body = operation.get('requestBody', {})
                         if request_body:
                             try:
