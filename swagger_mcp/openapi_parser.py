@@ -327,13 +327,35 @@ class OpenAPIParser:
         return False
 
     # ------------------------------------------------------------------
-    # Cookie security helpers
+    # Authentication scheme helpers
     # ------------------------------------------------------------------
     def _is_cookie_scheme(self, scheme_name: str) -> bool:
         """Return True if the security scheme is an apiKey located in a cookie."""
         scheme = self.security_schemes.get(scheme_name, {})
         return scheme.get('type') == 'apiKey' and scheme.get('in') == 'cookie'
 
+    def _is_dynamic_scheme(self, scheme_name: str) -> bool:
+        """Return True if the scheme requires runtime negotiation (non-static)."""
+        scheme = self.security_schemes.get(scheme_name, {})
+        s_type = scheme.get('type')
+        if s_type in {'oauth2', 'openIdConnect'}:
+            return True
+        if s_type == 'apiKey' and scheme.get('in') == 'cookie':
+            return True
+        # everything else (apiKey header/query, http basic/bearer) is static
+        return False
+
+    def _requires_dynamic_only(self, security_requirements: List[Dict[str, Any]]) -> bool:
+        """Return True if each alternative requirement is composed solely of dynamic schemes."""
+        if not security_requirements:
+            return False
+        for requirement in security_requirements:
+            for scheme_name in requirement:
+                if not self._is_dynamic_scheme(scheme_name):
+                    return False
+        return True
+
+    # Legacy cookie-only check kept for backward compatibility
     def _requires_cookie_only(self, security_requirements: List[Dict[str, Any]]) -> bool:
         """Return True if every alternative security requirement relies solely on cookie schemes."""
         if not security_requirements:
@@ -499,9 +521,9 @@ class OpenAPIParser:
                         if endpoint.requires_oauth:
                             endpoint.oauth_scopes = self._get_oauth_scopes(self.global_security)
                     
-                    # Skip endpoints that require only cookie-based authentication
-                    if self._requires_cookie_only(endpoint.security_requirements):
-                        logger.info(f"Skipping endpoint {method.upper()} {path} due to cookie-only auth")
+                    # Skip endpoints that require only dynamic authentication (non-static)
+                    if self._requires_dynamic_only(endpoint.security_requirements):
+                        logger.info(f"Skipping endpoint {method.upper()} {path} due to dynamic-only auth")
                         continue
 
                     # Process parameters
